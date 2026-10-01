@@ -45,5 +45,6 @@ dev = [
     "slenderpy[test,lint]",
 ]
 
+
 [project.urls]
 "Homepage" = "https://github.com/rte-france/pallas-slenderpy"
