@@ -18,8 +18,9 @@ def _call(force, x=X, t=0.0):
 
 def test_gravity_points_down():
     fy, fz = _call(Gravity(2.0))
-    assert fy == 0.0
-    assert fz == pytest.approx(-_GRAVITY * 2.0)
+    assert fy.shape == fz.shape == X.shape
+    assert np.all(fy == 0.0)
+    assert fz == pytest.approx(np.full_like(X, -_GRAVITY * 2.0))
 
 
 def test_sum_flattens_its_terms():
@@ -48,6 +49,52 @@ def test_adding_a_plain_function_raises():
 
 
 @pytest.mark.parametrize(
+    "total, expected",
+    [
+        (Gravity(2.0) + 1.0, (1.0, 1.0 - 2.0 * _GRAVITY)),
+        (1.0 + Gravity(2.0), (1.0, 1.0 - 2.0 * _GRAVITY)),
+        (Gravity(2.0) + (3.0, 4.0), (3.0, 4.0 - 2.0 * _GRAVITY)),
+        ((3.0, 4.0) + Gravity(2.0), (3.0, 4.0 - 2.0 * _GRAVITY)),
+        (Gravity(2.0) * 3.0, (0.0, -6.0 * _GRAVITY)),
+        (3.0 * Gravity(2.0), (0.0, -6.0 * _GRAVITY)),
+        ((5.0, 3.0) * Gravity(2.0), (0.0, -6.0 * _GRAVITY)),
+        (sum([Gravity(1.0), Gravity(2.0)]), (0.0, -3.0 * _GRAVITY)),
+    ],
+)
+def test_force_with_constants(total, expected):
+    fy, fz = _call(total)
+    assert fy.shape == fz.shape == X.shape
+    assert fy == pytest.approx(np.full_like(X, expected[0]))
+    assert fz == pytest.approx(np.full_like(X, expected[1]))
+
+
+def test_scaling_a_sum_scales_each_component():
+    excitation = PointExcitation(frequency=1.0, amplitude=3.0, position=5.0)
+    total = (2.0, -1.0) * (Gravity(2.0) + excitation + (1.0, 1.0))
+    t = 0.2
+    fy, fz = _call(total, t=t)
+    assert fy == pytest.approx(np.full_like(X, 2.0))
+    expected = -(-2.0 * _GRAVITY + _call(excitation, t=t)[1] + 1.0)
+    assert fz == pytest.approx(expected)
+
+
+@pytest.mark.parametrize("other", ["1.0", (1.0,), (1.0, 2.0, 3.0), (1.0, "2.0")])
+def test_invalid_constants_raise(other):
+    with pytest.raises(TypeError):
+        Gravity(1.0) + other
+    with pytest.raises(TypeError):
+        Gravity(1.0) * other
+
+
+@pytest.mark.parametrize("other", [math.nan, (1.0, math.inf)])
+def test_non_finite_constants_raise(other):
+    with pytest.raises(ValueError):
+        Gravity(1.0) + other
+    with pytest.raises(ValueError):
+        Gravity(1.0) * other
+
+
+@pytest.mark.parametrize(
     "x", [np.linspace(0.0, 10.0, 11), np.array([0.0, 0.5, 2.0, 4.5, 5.2, 7.0, 10.0])]
 )
 def test_point_excitation_integrates_to_its_amplitude(x):
@@ -69,7 +116,7 @@ def test_point_excitation_is_off_outside_its_window():
     assert np.any(_call(force, t=1.25)[1] != 0.0)
 
 
-@pytest.mark.parametrize("position, node", [(0.0, 1), (10.0, 9), (25.0, 9)])
+@pytest.mark.parametrize("position, node", [(0.0, 1), (10.0, 9)])
 def test_point_excitation_never_on_a_support(position, node):
     force = PointExcitation(frequency=1.0, amplitude=1.0, position=position)
     _, fz = _call(force, t=0.25)
@@ -103,3 +150,13 @@ def test_point_excitation_picks_the_nearest_node():
 def test_invalid_inputs_raise(factory):
     with pytest.raises(ValueError):
         factory()
+
+
+def test_point_excitation_past_the_span_raises():
+    with pytest.raises(ValueError, match="past the span end"):
+        _call(PointExcitation(frequency=1.0, amplitude=1.0, position=10.5))
+
+
+def test_point_excitation_at_the_span_end_is_accepted():
+    _, fz = _call(PointExcitation(frequency=1.0, amplitude=1.0, position=10.0), t=0.1)
+    assert np.count_nonzero(fz) == 1

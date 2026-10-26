@@ -21,6 +21,16 @@ triad; SI units. Shared variable names (the output contract):
 | ``eta`` | Bouc-Wen internal variable | no | yes |
 | ``n_iter`` | Newton iterations of the step (scalar) | no | yes |
 | ``dtension`` | dynamic increment of axial force (N) | yes | no |
+| ``kinetic_energy`` | kinetic energy (J, scalar, ``energy=True``) | yes | yes |
+| ``tension_energy`` | potential energy of the tension (J, scalar, ``energy=True``) | yes | yes |
+| ``axial_energy`` | energy of the uniform dynamic strain (J, scalar, ``energy=True``) | yes | no |
+| ``bending_energy`` | energy of the linear bending moment (J, scalar, ``energy=True``) | no | yes |
+| ``external_work`` | work done by the force (J, scalar, ``energy=True``) | yes | yes |
+| ``damping_work`` | energy dissipated by damping (J, scalar, ``energy=True``) | yes | yes |
+| ``hysteresis_work`` | work absorbed by the Bouc-Wen term (J, scalar, ``energy=True``) | no | yes |
+| ``curvature_work`` | bending work not stored with the exact curvature (J, scalar, ``energy=True``) | no | yes |
+| ``numerical_work`` | energy dissipated by the time scheme (J, scalar, ``energy=True``) | no | yes |
+| ``boundary_work`` | work done by the supports (J, scalar, ``energy=True``) | no | yes |
 """
 
 from __future__ import annotations
@@ -278,11 +288,13 @@ class Results:
     def update(self, k, s, lov, lod):
         """Record a snapshot. Internal or expert use only."""
         los = self.los()
+        # write into the numpy arrays: xarray item assignment is about ten
+        # times slower and is called at every output step
         for i, v in enumerate(lov):
             if self.lov_dims[v] == 2:
-                self.data[v][k, :] = np.interp(los, s, lod[i])
+                self.data[v].values[k, :] = np.interp(los, s, lod[i])
             else:
-                self.data[v][k] = lod[i]
+                self.data[v].values[k] = lod[i]
 
     def __getitem__(self, key):
         return self.data[key]
@@ -333,6 +345,8 @@ class Results:
         """
         if lov is not None:
             self.data = self.data.drop_vars(lov)
+            for v in lov:
+                del self.lov_dims[v]
 
         aot = np.array(self.lot())
         ttk = np.where((aot >= tmin) & (aot <= tmax))[0].tolist()

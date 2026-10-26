@@ -1,10 +1,10 @@
 import numpy as np
 import pytest
 
-from slenderpy.beam import bending
+from slenderpy.beam import bending, curvature
 from slenderpy.beam.static import shape
 from slenderpy.beam.static.shape import BendingModel, solve
-from slenderpy.boundary_condition import BoundaryCondition, clamped
+from slenderpy.boundary_condition import BoundaryCondition, clamped, hinged
 from slenderpy.components import Conductor, Span
 
 
@@ -294,3 +294,39 @@ def test_fine_grid_converges(model, ei):
     assert np.all(np.isfinite(y))
     # same sag as a coarse grid that converges without the floor
     assert y.min() == pytest.approx(coarse.min(), rel=1e-2)
+
+
+def test_order_2_boundary_conditions_raise():
+    bc = BoundaryCondition(2)
+    conductor = Conductor(mass=1.0, ei_max=10.0)
+    span = Span(length=1.0, tension=100.0, boundary_conditions=bc)
+    with pytest.raises(ValueError, match="order-4"):
+        solve(conductor, span, rhs=np.zeros(10), n=10)
+
+
+def test_non_convergence_returns_nan():
+    conductor = Conductor(
+        mass=1.57, ei_min=28.28, ei_max=2155.07, beta_flexion=6.438e-07
+    )
+    span = Span(length=20.0, tension=2.0e03, boundary_conditions=clamped())
+    n = 101
+    y = solve(
+        conductor,
+        span,
+        np.full(n, -9.81 * conductor.mass),
+        n,
+        model=BendingModel.VARYING,
+        max_iter=1,
+    )
+    assert np.isnan(y).all()
+
+
+def test_hinged_static_curvature_vanishes_at_the_supports():
+    """The hinged condition holds at the support node itself."""
+    conductor = Conductor(mass=1.57, ei_max=2155.07)
+    span = Span(length=50.0, tension=2.0e04, boundary_conditions=hinged())
+    n = 101
+    y = solve(conductor, span, np.full(n, -9.81 * conductor.mass), n)
+    chi = curvature.create(n, span.length / (n - 1), True).value(y)
+    assert abs(chi[0]) <= 1e-10 * np.abs(chi).max()
+    assert abs(chi[-1]) <= 1e-10 * np.abs(chi).max()

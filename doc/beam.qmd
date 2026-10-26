@@ -125,38 +125,57 @@ $$
 
 ### Time discretization
 
-The velocity $v = \frac{\partial y}{\partial t }$ is introduced as an
-additional unknown and both models are integrated with the same Crank-Nicolson
-scheme on the first-order system, solved for the velocity:
+Both models are integrated with the HHT-$\alpha$ scheme (Hilber-Hughes-Taylor),
+with the velocity $v$ and the acceleration $a$ as additional unknowns. With
+$P = c v + K y + G$ the forces of the equation, the step enforces
 
 $$
 \begin{aligned}
-&A v^{n+1} = B v^n - \Delta t K y^n - \frac{\Delta t}{2} (G^n + G^{n+1}) + \frac{\Delta t}{2} (F^n + F^{n+1}) \\
-&y^{n+1} = y^n + \frac{\Delta t}{2} (v^{n+1} + v^n)
+&m a^{n+1} + (1 + \alpha) P^{n+1} - \alpha P^n = (1 + \alpha) F^{n+1} - \alpha F^n \\
+&v^{n+1} = v^n + \Delta t \left( (1 - \gamma) a^n + \gamma a^{n+1} \right) \\
+&y^{n+1} = y^n + \Delta t v^n + \Delta t^2 \left( (\tfrac{1}{2} - \beta) a^n + \beta a^{n+1} \right)
 \end{aligned}
 $$
 
-with $K = EI_{lin} D_4 - H D_2$ the linear part of the equation,
-$A = m I_d + \frac{\Delta t}{2} c I_d + \frac{\Delta t^2}{4} K$ plus the
-boundary rows, $B$ the same with the two last signs flipped,
+with $\gamma = \frac{1}{2} - \alpha$ and $\beta = \frac{(1 - \alpha)^2}{4}$,
+$K = EI_{lin} D_4 - H D_2$ the linear part of the equation,
 $c = 2 m \omega_0 \zeta$ the damping coefficient, and
 $G = D_2 M - EI_{lin} D_4 y$ the nonlinear remainder. $EI_{lin}$ is
 $EI$ for the constant model and $EI_{min}$ for the varying one; the
-split between $K$ and $G$ is purely algebraic.
+split between $K$ and $G$ is purely algebraic. Eliminating $a^{n+1}$ and
+$y^{n+1}$ leaves the velocity as the only unknown, with the matrix
+$A = m I_d + w c I_d + w h K$ plus the boundary rows, where
+$w = \gamma \Delta t (1 + \alpha)$ and $h = \beta \Delta t / \gamma$ is the
+derivative of $y^{n+1}$ with respect to $v^{n+1}$. The initial acceleration
+comes from the equation of motion at ``t0``.
+
+The solver uses $\alpha = -0.2$. $\alpha = 0$ is the Crank-Nicolson scheme,
+second order and energy conserving, but it does not damp the modes the time
+step cannot resolve: they flip sign from one step to the next. With the
+varying model these oscillations switch the Bouc-Wen branches, and the solution
+stops converging in time on medium spans and jumpers. $\alpha = -0.2$ damps
+them (spectral radius 2/3 at infinite frequency) and stays second order: on a
+resolved mode it adds a damping ratio of about $2.5 \cdot 10^{-4}$ at 25 steps
+per period and $3 \cdot 10^{-5}$ at 50. Weaker values are not enough: with
+$\alpha = -0.05$ or $-0.1$, a jumper (5 m, 50 N) in free vibration with 1 mm of
+motion keeps chattering between branches at its reversals. Its solution then
+turns chaotic, a change of $10^{-12}$ in the initial velocity moving it by up
+to $6 \cdot 10^{-6}$ m, and does not converge in time.
 
 For the constant model with the approximate curvature $G$ vanishes: the
 problem is linear, $A$ is factorised once and each step is one solve.
 
 In the three other cases the step is solved with a Newton iteration on its
-residual, with the tangent
+residual, started from the velocity extrapolated from the two previous steps,
+$2 v^n - v^{n-1}$, with the tangent
 
 $$
-A + \frac{\Delta t^2}{4} \left( D_2 \, \mathrm{diag}\left(\frac{dM}{d\chi}\right) \frac{d\chi}{dy} - EI_{lin} D_4 \right)
+A + w h \left( D_2 \, \mathrm{diag}\left(\frac{dM}{d\chi}\right) \frac{d\chi}{dy} - EI_{lin} D_4 \right)
 $$
 
 and a backtracking that relaxes a step increasing the residual. The hysteresis
-variable is advanced fully implicitly, with
-$\Delta \chi = \Delta t \frac{d\chi}{dy} v^{n+1}$:
+variable is advanced fully implicitly, with the curvature increment of the
+step $\Delta \chi = \chi^{n+1} - \chi^n$:
 
 $$
 \chi_0 (\eta^{n+1} - \eta^n) = \Delta \chi - \frac{1}{2} (\Delta \chi |\eta^{n+1}| + |\Delta \chi| \eta^{n+1})
@@ -170,10 +189,228 @@ tangent of $EI_{max}$ its gain is $EI_{max}/EI_{min}$. A step that
 does not converge stops the run; the snapshots already computed are kept and
 the remaining ones are left at ``nan``.
 
+The increment $\Delta \chi$ must be the one the curvature itself makes over
+the step. Taking it as the curvature rate at the end of the step times
+$\Delta t$ puts $\eta$ half a step ahead of $\chi$: in the elastic range the
+hysteretic moment then leads the curvature, which acts as a numerical damping
+proportional to $\Delta t$. On a 30 m span (mode 9, curvature 0.03 $\chi_0$),
+that damping was 23 times the hysteretic one at 25 steps per period, and
+still 2.4 times at 400 steps.
+
+### Time convergence
+
+The scheme is checked over three spans (ASTER 570, clamped ends), which cover
+the hysteresis regimes met in practice: a long span (440 m, 39 kN), nearly
+elastic; a medium span (50 m, 5 kN), around $\chi_0$; and a jumper (5 m,
+50 N), whose small $\chi_0$ keeps it saturated. Each is run in free vibration,
+under a point force at its first frequency and under one at 20 Hz. With 20
+steps per period of the loading at the coarsest step, the error against a run
+at $\Delta t / 64$ falls at each refinement to $\Delta t / 4$ and
+$\Delta t / 16$, on the position, the velocity and $\eta$, by 4.6 to 240 times
+overall (``test/test_beam-dynamic-convergence.py``). The order is 2 where the
+hysteresis is inactive and between 1/2 and 1 where it switches, the Bouc-Wen
+law not being smooth at a reversal. These runs use a Newton tolerance of
+$10^{-10}$: at the default $10^{-6}$, the point where Newton stops decides on
+which branch a node leaves a reversal, and the jumper run at $\Delta t / 64$
+moves by up to $10^{-7}$ m with the tolerance, 15 % of the error at
+$\Delta t / 16$.
+
+The equivalent damping of a free decay (30 m hinged span, mode 9) is resolved
+at 50 steps per period, against 23 times the hysteretic damping at 25 steps
+for the former scheme (see above):
+
+| $\chi / \chi_0$ | steps per period | damping ratio |
+|-----------------|------------------|---------------|
+| 0.03 | 25 | 3.7e-4 |
+| 0.03 | 50 | 1.6e-4 |
+| 0.03 | 100 | 1.3e-4 |
+| 0.03 | 400 | 1.3e-4 |
+| 1 | 25 | 2.9e-3 |
+| 1 | 50 | 2.7e-3 |
+| 1 | 400 | 2.7e-3 |
+
+## Energy balance
+
+### Continuous balance
+
+Multiplying the beam equation
+$m \ddot{y} + c \dot{y} + \frac{\partial^2 M}{\partial x^2} - H \frac{\partial^2 y}{\partial x^2} = F$
+by the velocity $v = \dot{y}$, integrating over the span and by parts gives
+
+$$
+\frac{d}{dt} \left( E_k + E_H + E_B \right) + P_c + P_\eta + P_\chi = P_F + P_b
+$$
+
+with the kinetic, tension and bending energies
+
+$$
+E_k = \int_0^L \frac{m}{2} v^2 dx, \quad
+E_H = \int_0^L \frac{H}{2} \left( \frac{\partial y}{\partial x} \right)^2 dx, \quad
+E_B = \int_0^L \frac{EI_{lin}}{2} \chi^2 dx
+$$
+
+the powers dissipated by the damping, absorbed by the Bouc-Wen term
+$M - EI_{lin} \chi = (EI_{max} - EI_{min}) \chi_0 \eta$ (varying model only)
+and by the exact curvature
+
+$$
+P_c = \int_0^L c v^2 dx, \quad
+P_\eta = \int_0^L (EI_{max} - EI_{min}) \chi_0 \eta \dot{\chi} dx, \quad
+P_\chi = \int_0^L M \left( \frac{\partial^2 v}{\partial x^2} - \dot{\chi} \right) dx
+$$
+
+the power of the external force $P_F = \int_0^L F v dx$ and the power of the
+supports
+
+$$
+P_b = \left[ H \frac{\partial y}{\partial x} v - \frac{\partial M}{\partial x} v + M \frac{\partial v}{\partial x} \right]_0^L
+$$
+
+$P_\chi$ is zero for the approximate curvature, where
+$\frac{\partial^2 v}{\partial x^2} = \dot{\chi}$. With the exact curvature
+it is not: the term $\frac{\partial^2 M}{\partial x^2}$ of the equation is not
+the variation of $E_B$, so part of the bending work is not stored as $E_B$.
+$P_b$ is zero for fixed hinged or clamped supports.
+
+### Usage
+
+[](`~slenderpy.beam.dynamic.solve_dynamic`) with ``energy=True`` adds nine
+scalars per output time to the results, in J:
+
+| name | meaning |
+|------|---------|
+| ``kinetic_energy`` | $E_k$ |
+| ``tension_energy`` | $E_H$ |
+| ``bending_energy`` | $E_B$, energy stored by the linear part of the moment |
+| ``external_work`` | work done by the force on the beam, gravity included |
+| ``damping_work`` | energy dissipated by $\zeta$, never negative |
+| ``hysteresis_work`` | work absorbed by the Bouc-Wen term, zero for the constant model |
+| ``curvature_work`` | work of the moment not stored as $E_B$, zero for the approximate curvature |
+| ``numerical_work`` | energy dissipated by the time scheme, mostly in the modes the step does not resolve |
+| ``boundary_work`` | work provided (positive) or absorbed (negative) by the supports |
+
+The works are cumulated from ``t0``, where they are zero, and
+
+    kinetic_energy + tension_energy + bending_energy
+        + damping_work + hysteresis_work + curvature_work + numerical_work
+        - external_work - boundary_work
+
+is constant in time.
+
+``numerical_work`` has no continuous counterpart: it measures what the HHT
+scheme removes, and falls quickly as the step resolves the motion. On the
+440 m span below (clamped, initial shape $\sin^3$, half of whose energy lies
+in the third mode), it reaches 36 % of the initial energy after 4 periods at
+20 steps per period of the first mode (under 7 for the third), 6 % at 50 steps
+and 1.5e-4 at 400 steps.
+
+### Discrete balance
+
+The balance is computed on the discrete equation the solver solves, not with
+a separate quadrature: the row $i$ of the step multiplied by
+$\delta y_i = y_i^{n+1} - y_i^n$ is the work of each term over the step. Let $I$ be the rows the scheme solves (nodes 2 to $N-3$, the others
+carry the boundary conditions), $J$ the nodes 1 to $N-2$, $D_2$ the centered
+second difference, $\bar{a} = (a^n + a^{n+1})/2$ and
+$\delta a = a^{n+1} - a^n$. The state energies are
+
+$$
+E_k = \frac{m}{2} \Delta x \sum_I v_i^2, \quad
+E_H = \frac{H}{2} \Delta x \sum_{j=0}^{N-2} \left( \frac{y_{j+1} - y_j}{\Delta x} \right)^2, \quad
+E_B = \frac{EI_{lin}}{2} \Delta x \sum_J \chi_j^2
+$$
+
+and the works are increased at each step by
+
+$$
+\begin{aligned}
+\delta W_F &= \Delta x \sum_I \bar{F}_i \delta y_i, \quad
+\delta W_c = \frac{c}{\Delta t} \Delta x \sum_I \delta y_i^2, \quad
+\delta W_\eta = (EI_{max} - EI_{min}) \chi_0 \Delta x \sum_J \bar{\eta}_j \delta \chi_j \\
+\delta W_\chi &= \Delta x \sum_J \bar{M}_j \left( (D_2 \delta y)_j - \delta \chi_j \right) \\
+\delta W_b &= \Delta x \sum_J \bar{M}_j (D_2 \delta y)_j - \Delta x \sum_I (D_2 \bar{M})_i \delta y_i
++ H \Delta x \sum_I (D_2 \bar{y})_i \delta y_i + \delta E_H
+\end{aligned}
+$$
+
+$\bar{M} \delta \chi$ is exactly $\delta (EI_{lin} \chi^2 / 2)$ plus the
+Bouc-Wen term, and $\delta W_b$ collects what summation by parts leaves at the
+ends. These works take the forces at the middle of the step, which is what a
+Crank-Nicolson step does. The HHT step differs in three ways: its inertia
+term is not the increment of $E_k$, it weights the forces at $n+1$ and $n$ by
+$1 + \alpha$ and $-\alpha$ instead of $1/2$, and its damping force uses
+$(1 + \alpha) v^{n+1} - \alpha v^n$ instead of $\delta y / \Delta t$. The work
+of these differences is
+
+$$
+\delta W_{num} = m \Delta x \sum_I a_i^{n+1} \delta y_i - \delta E_k
++ \Delta x \sum_I \left( (\tfrac{1}{2} + \alpha) \left( (D_2 \delta M)_i - H (D_2 \delta y)_i - \delta F_i \right)
++ c \left( (1 + \alpha) v_i^{n+1} - \alpha v_i^n - \frac{\delta y_i}{\Delta t} \right) \right) \delta y_i
+$$
+
+zero up to the step residual for $\alpha = 0$, where it is half the
+difference of the equations at $n+1$ and $n$ times $\delta y$. The balance
+therefore holds to the residual of each step: to round-off
+for the constant model with the approximate curvature, to the Newton
+tolerance otherwise.
+
+The discrete supports are not exactly inert. On a 440 m span
+($H$ = 31000 N, initial shape $0.5 \sin^3(\pi x / L)$ m, 400 steps per
+period, 4 periods, constant model, approximate curvature), the drift of the
+balance, ``numerical_work`` included, relative to the initial energy is:
+
+| supports | ns | without ``boundary_work`` | with ``boundary_work`` |
+|----------|----|---------------------------|------------------------|
+| clamped | 201 | 1.5e-13 | 1.5e-13 |
+| clamped | 401 | 4.2e-13 | 4.2e-13 |
+| clamped | 801 | 3.5e-12 | 3.5e-12 |
+| hinged | 201 | 3.9e-05 | 1.5e-13 |
+| hinged | 401 | 5.0e-06 | 5.0e-13 |
+| hinged | 801 | 7.5e-07 | 3.1e-12 |
+
+``boundary_work`` is round-off for clamped supports and falls as
+$\Delta x^3$ for hinged ones, thanks to the curvature stencil of the boundary
+rows (see [Boundary Conditions](#boundary-conditions)). With moving supports
+(``dynamic_values``) it also holds their physical work. The remaining drift is
+the round-off of the $D_4$ operator, which grows like $EI / \Delta x^4$.
+
+Limits:
+
+* $E_k$ is summed on $I$: the velocity of nodes 0, 1, $N-2$ and $N-1$ is set
+  by the boundary rows, zero at a fixed clamped end and of order $\Delta x$ at
+  a fixed hinged one;
+* on a Bouc-Wen step solved by the fallback (branch lagged, see
+  [](`~slenderpy.beam.dynamic.solve_dynamic`)) the balance only holds to first
+  order;
+* the force is evaluated at the state of the previous step, as in the solver,
+  so a state-dependent force is lagged by one step in ``external_work`` too;
+* the coupled Stockbridge solver does not compute the balance.
+
+### Compute cost
+
+The works are accumulated at every time step, since they depend on the whole
+path; the energies, functions of the state, are only computed at the output
+steps. The balance thus adds a fixed number of vector operations on the
+``ns`` nodes per step, about 55 $\mu$s at ``ns = 401``. Measured on the
+440 m span with hinged supports, ``ns = 401``, 1600 steps with one output
+every 10, gravity and a point excitation (fastest of 15 runs,
+``compute_time``):
+
+| case | ``energy=False`` | ``energy=True`` | overhead |
+|------|------------------|-----------------|----------|
+| constant model, approximate curvature | 0.106 s | 0.193 s | about 80 % |
+| varying model, exact curvature | 0.70 s | 0.79 s | about 10 % |
+
+The overhead shows in the linear case, where a step is a single triangular
+solve (about 65 $\mu$s); it is small next to the Newton iterations of the
+other cases (about 0.45 ms per step). The varying-model times spread by up to
+25 % from one series of runs to the next, the overhead staying about 55 $\mu$s
+per step.
+
 
 ## Boundary Conditions
 
-For all the previous resolutions, there are always four boundary conditions. Two for each side of the beam.
+For all the previous resolutions, there are always four boundary conditions. Two for each side of the beam:
+the beam solvers raise a `ValueError` for a [](`~slenderpy.boundary_condition.BoundaryCondition`) of order 2.
 Considering the left side of the beam at $x=0$ and the right side at $x=L$, the boundary conditions supported are under the form:
 
 $$
@@ -193,11 +430,19 @@ To take into account properly these boundary conditions in the finite difference
 $$
 \begin{aligned}
 a_1 y_0 + b_1 \frac{y_1 - y_0}{\Delta x} + c_1 \frac{y_0 - 2y_1 + y_2}{\Delta x^2} = d_1 \\
-a_2 y_0 + b_2 \frac{y_1 - y_0}{\Delta x} + c_2 \frac{y_0 - 2y_1 + y_2}{\Delta x^2} = d_2 \\
-a_3 y_N + b_3 \frac{y_N - y_{N-1}}{\Delta x} + c_3 \frac{y_N - 2y_{N-1} + y_{N-2}}{\Delta x^2} = d_3 \\
+a_2 y_0 + b_2 \frac{y_1 - y_0}{\Delta x} + c_2 \frac{2y_0 - 5y_1 + 4y_2 - y_3}{\Delta x^2} = d_2 \\
+a_3 y_N + b_3 \frac{y_N - y_{N-1}}{\Delta x} + c_3 \frac{2y_N - 5y_{N-1} + 4y_{N-2} - y_{N-3}}{\Delta x^2} = d_3 \\
 a_4 y_N + b_4 \frac{y_N - y_{N-1}}{\Delta x} + c_4 \frac{y_N - 2y_{N-1} + y_{N-2}}{\Delta x^2} = d_4
 \end{aligned}
 $$
+
+The curvature of the second relation of each end uses the one-sided
+second-order stencil, so that a hinged condition holds at the support node
+itself. The centered stencil, which the first relation keeps, would place
+the second relation one node inside and make the support provide or absorb
+energy at first order in $\Delta x$ (see [Energy balance](#energy-balance));
+the first relation keeps it because a four-point stencil there would not fit
+the pentadiagonal band of the solvers.
 
 Thus the corresponding matrix and vector of the equation above are:
 
@@ -205,9 +450,9 @@ $$
 \begin{aligned}
 A &= \begin{pmatrix}
 a_1 - \frac{b_1}{\Delta x} + \frac{c_1}{\Delta x^2} & \frac{b_1}{\Delta x} - \frac{2c_1}{\Delta x^2}  & \frac{c_1}{\Delta x^2} & 0 & \cdots & \cdots & 0 \\
-a_2 - \frac{b_2}{\Delta x} + \frac{c_2}{\Delta x^2} & \frac{b_2}{\Delta x} - \frac{2c_2}{\Delta x^2}  & \frac{c_2}{\Delta x^2} & 0 & \cdots & \cdots  & 0 \\
+a_2 - \frac{b_2}{\Delta x} + \frac{2c_2}{\Delta x^2} & \frac{b_2}{\Delta x} - \frac{5c_2}{\Delta x^2}  & \frac{4c_2}{\Delta x^2} & - \frac{c_2}{\Delta x^2} & \cdots & \cdots  & 0 \\
 0 &\ddots & \ddots &  \ddots &  \ddots &  \ddots & 0 \\
-0 & \cdots & \cdots & 0 & \frac{c_3}{\Delta x^2} & - \frac{b_3}{\Delta x} - \frac{2c_3}{\Delta x^2} & a_3 + \frac{b_3}{\Delta x} + \frac{c_3}{\Delta x^2} \\
+0 & \cdots & \cdots & - \frac{c_3}{\Delta x^2} & \frac{4c_3}{\Delta x^2} & - \frac{b_3}{\Delta x} - \frac{5c_3}{\Delta x^2} & a_3 + \frac{b_3}{\Delta x} + \frac{2c_3}{\Delta x^2} \\
 0 & \cdots & \cdots & 0 & \frac{c_4}{\Delta x^2} & - \frac{b_4}{\Delta x} - \frac{2c_4}{\Delta x^2} & a_4 + \frac{b_4}{\Delta x} + \frac{c_4}{\Delta x^2}
 \end{pmatrix} \\
 b &= \begin{pmatrix}
@@ -227,4 +472,7 @@ we thus derivate with respect to time the equation above obtaining the same matr
 $d_i(t) \forall i \in \left\{1,2,3,4\right\}$.
 
 Thus when using [](`~slenderpy.beam.dynamic.solve_dynamic`) the user should set `dynamic_values` with $\frac{\partial d_i}{\partial t} \forall i \in \left\{1,2,3,4\right\}$
-in the [](`~slenderpy.boundary_condition.BoundaryCondition`) constructor.
+in the [](`~slenderpy.boundary_condition.BoundaryCondition`) constructor. Each item is a callable `f(x, t)`, evaluated at the
+bound its condition applies to ($x = 0$ for $d_1, d_2$, $x = L$ for $d_3, d_4$), and the tuple follows the rows from the
+first to the last node: $(d_1, d_2, d_3, d_4)$ is `(left[0], left[1], right[1], right[0])`. Without `dynamic_values` the
+constant $d_i$ only enter the static solve, and the dynamic solve keeps the boundary values of the initial state.
