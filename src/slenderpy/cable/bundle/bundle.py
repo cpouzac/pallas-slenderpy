@@ -66,6 +66,8 @@ class Bundle:
     spacers : list of Spacer
         Spacer descriptors. May be empty (degenerate bundle = independent
         cables).
+    is_2d: boolean
+        Inicates if the bundle spacers are 2D or not.
     """
 
     def __init__(self, cables: List[Cable], spacers: List[Spacer]) -> None:
@@ -90,6 +92,15 @@ class Bundle:
                     )
         self.cables = list(cables)
         self.spacers = list(spacers)
+        self.is_2d = False
+
+        if spacers:  
+            spacer_2d_flags = [sp.is_2d for sp in spacers]
+            if len(set(spacer_2d_flags)) > 1:
+                raise ValueError("All Spacers within a Bundle must have the same dimension (= same is_2d value)")
+            self.is_2d = spacer_2d_flags[0]
+
+
 
     @property
     def n_cables(self) -> int:
@@ -304,36 +315,116 @@ class Bundle:
         coefficients per edge. Returned list mirrors ``self.spacers``."""
         ns = len(ds) + 1
         data = []
-        for sp_ in self.spacers:
-            # Map continuous s_k in ]0, 1[ to the nearest interior node
-            # index (0-based, in [0, n-1] where n = ns - 2). Reject ends.
-            full_idx = int(round(sp_.s * (ns - 1)))
-            interior_idx = full_idx - 1
-            if interior_idx < 0 or interior_idx >= ns - 2:
-                raise ValueError(
-                    f"spacer at s={sp_.s} maps to a boundary node; "
-                    f"choose s strictly inside ]0, 1["
-                )
-            # Local cell width: use the larger of the two adjacent cells
-            # so the localised point load is on the order of F / (ds * L).
-            ds_local = 0.5 * (ds[full_idx - 1] + ds[full_idx])
-            ds_dim = ds_local * L
-            edges_nd = []
-            for e in sp_.edges:
-                K_nd = e.k_perp / (m * g * ds_dim) * L
-                C_nd = e.c_perp / (m * g * ds_dim * tAd) * L
-                # Rest offsets are stored non-dim (relative to L).
-                edges_nd.append(
-                    {
-                        "i": e.i,
-                        "j": e.j,
-                        "K_nd": K_nd,
-                        "C_nd": C_nd,
-                        "delta_n": e.delta_n / L,
-                        "delta_b": e.delta_b / L,
-                    }
-                )
-            data.append({"interior_idx": interior_idx, "edges": edges_nd})
+
+        # 1D SPACER
+        if not self.is_2d:
+            for spacer in self.spacers:
+                # Map continuous s_k in ]0, 1[ to the nearest interior node
+                # index (0-based, in [0, n-1] where n = ns - 2). Reject ends.
+                full_idx = int(round(spacer.s * (ns - 1)))
+                interior_idx = full_idx - 1
+                if interior_idx < 0 or interior_idx >= ns - 2:
+                    raise ValueError(
+                        f"spacer at s={spacer.s} maps to a boundary node; "
+                        f"choose s strictly inside ]0, 1["
+                    )
+            
+                # Local cell width: use the larger of the two adjacent cells
+                # so the localised point load is on the order of F / (ds * L).
+                ds_local = 0.5 * (ds[full_idx - 1] + ds[full_idx])
+                ds_dim = ds_local * L
+                edges_nd = []
+                for e in sp_.edges:
+                    K_nd_n = e.k_n / (m * g * ds_dim) * L
+                    C_nd_n = e.c_n / (m * g * ds_dim * tAd) * L
+                    K_nd_b = e.k_b / (m * g * ds_dim) * L
+                    C_nd_b = e.c_b / (m * g * ds_dim * tAd) * L
+                    # Rest offsets are stored non-dim (relative to L).
+                    edges_nd.append(
+                        {
+                            "i": e.i,
+                            "j": e.j,
+                            "K_nd_n": K_nd_n,
+                            "C_nd_n": C_nd_n,
+                            "K_nd_b": K_nd_b,
+                            "C_nd_b": C_nd_b,
+                            "delta_n": e.delta_n / L,
+                            "delta_b": e.delta_b / L,
+                        }
+                    )
+                data.append({"interior_idx": interior_idx, "edges": edges_nd})
+
+        # 2D SPACER
+        else:
+            is_uniform = np.allclose(ds, ds[0])
+            for spacer in self.spacers:
+                if is_uniform:
+                    # UNIFORM MESH
+                    w_nd = ds[0]
+                    
+                    full_idx_left = int(spacer.s * (ns - 1))
+                    full_idx_right = full_idx_left + 1
+                    
+                    full_idx = full_idx_left  
+                    ds_local = ds[0]
+                    
+                else:
+                    # IRREGULAR MESH 
+                    w_dim = spacer.width  
+                    w_nd = w_dim / L
+             
+                    full_idx = int(round(spacer.s * (ns - 1)))
+                    
+                    full_idx_left = full_idx
+                    full_idx_right = full_idx + 1
+                    
+                    # Mesh adaptation
+                    ds[full_idx] = w_nd
+                    ds_local = w_nd
+
+                interior_idx_left = full_idx_left - 1
+                interior_idx_right = full_idx_right - 1
+                
+                if interior_idx_left < 0 or interior_idx_right >= ns - 2:
+                    raise ValueError(
+                        f"2D spacer at s={spacer.s} overlaps boundary nodes : move it further inside the span."
+                    )
+                
+                ds_dim = ds_local * L
+                
+                edges_nd = []
+                for e in spacer.edges:
+                    K_nd_n = e.k_n / (m * g * ds_dim) * L
+                    C_nd_n = e.c_n / (m * g * ds_dim * tAd) * L
+                    K_nd_b = e.k_b / (m * g * ds_dim) * L
+                    C_nd_b = e.c_b / (m * g * ds_dim * tAd) * L
+                    
+                    J_n_nd = e.j_n / (m * g * ds_dim) * L
+                    J_b_nd = e.j_b / (m * g * ds_dim) * L
+                    
+                    edges_nd.append(
+                        {
+                            "i": e.i,
+                            "j": e.j,
+                            "K_nd_n": K_nd_n,
+                            "C_nd_n": C_nd_n,
+                            "K_nd_b": K_nd_b,
+                            "C_nd_b": C_nd_b,
+                            "delta_n": e.delta_n / L,
+                            "delta_b": e.delta_b / L,
+                            "J_n_nd": J_n_nd,
+                            "J_b_nd": J_b_nd,
+                            "width_nd": w_nd,
+                        }
+                    )
+                
+                data.append({
+                    "interior_idx_left": interior_idx_left,
+                    "interior_idx_right": interior_idx_right,
+                    "edges": edges_nd
+                })
+
+
         return data
 
     @staticmethod
