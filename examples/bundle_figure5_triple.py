@@ -16,10 +16,10 @@ cable over time, and a mid-span snapshot showing the energy redistribution.
 import matplotlib.pyplot as plt
 import numpy as np
 
-from slenderpy import simtools
-from slenderpy.cable.dynamic.bundle import Bundle, InitialConditions
-from slenderpy.cable.dynamic.cable import Cable
-from slenderpy.cable.dynamic.spacer import Spacer, SpacerEdge
+from slenderpy import simulation 
+from slenderpy.cable.bundle.bundle import Bundle, InitialConditions
+from slenderpy.cable.bundle.cable import Cable
+from slenderpy.cable.bundle.spacer import Spacer, SpacerEdge
 
 
 def _aster570():
@@ -58,7 +58,7 @@ def run() -> None:
 
     ns = 81
     los = np.linspace(0.0, 1.0, ns)[1:-1].tolist()
-    params = simtools.Parameters(
+    params = simulation.Parameters(
         ns=ns,
         t0=0.0,
         tf=6.0,
