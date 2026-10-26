@@ -26,10 +26,9 @@ import scipy.sparse.linalg
 
 from slenderpy import _progress_bar as _spb
 from slenderpy import fdm_utils as _fdm
-from slenderpy import simtools
-
-from slenderpy.cable.dynamic.cable import Cable
-from slenderpy.cable.dynamic.spacer import Spacer
+from slenderpy import simulation
+from slenderpy.cable.bundle.cable import Cable
+from slenderpy.cable.bundle.spacer import Spacer
 
 _VARS = ("ut", "un", "ub", "ef")
 
@@ -98,16 +97,16 @@ class Bundle:
 
     def solve(
         self,
-        parameters: simtools.Parameters,
+        parameters: simulation.Parameters,
         force: Optional[Callable] = None,
         zt: float = 0.0,
         initial_conditions: Optional[InitialConditions] = None,
-    ) -> simtools.Results:
+    ) -> simulation.Results:
         """Run the dynamic simulation.
 
         Parameters
         ----------
-        parameters : slenderpy.simtools.Parameters
+        parameters : slenderpy.simulation.Parameters
             Simulation parameters.
         force : callable, optional
             Bundle force callback with signature
@@ -124,7 +123,7 @@ class Bundle:
 
         Returns
         -------
-        slenderpy.simtools.Results
+        slenderpy.simulation.Results
             Results object with per-sub-conductor displacement and axial
             force traces named ``ut_i``, ``un_i``, ``ub_i``, ``ef_i``.
         """
@@ -184,14 +183,14 @@ class Bundle:
         # coefficients per edge.
         spacer_data = self._prepare_spacers(ds, L, m, g, tAd)
 
-        # Output container. Per-cable variable names so simtools.multiplot
+        # Output container. Per-cable variable names so simulation.multiplot
         # superimposes sub-conductors at each output location.
         lov: List[str] = []
         for v in _VARS:
             for i in range(nc):
                 lov.append(f"{v}_{i}")
         lov_dims = tuple([2] * len(lov))
-        res = simtools.Results(
+        res = simulation.Results(
             lot=parameters.time_vector_output().tolist(),
             lov=lov,
             lov_dims=lov_dims,
@@ -339,7 +338,7 @@ class Bundle:
 
     @staticmethod
     def _record(
-        res: simtools.Results,
+        res: simulation.Results,
         k: int,
         s: np.ndarray,
         ds: np.ndarray,
