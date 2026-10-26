@@ -30,11 +30,11 @@ from typing import List, Tuple
 import numpy as np
 import plotly.graph_objects as go
 
-from slenderpy.legacy import force as legacy_force
 from slenderpy import simulation
 from slenderpy.cable.bundle.bundle import Bundle
 from slenderpy.cable.bundle.cable import Cable
 from slenderpy.cable.bundle.spacer import Spacer, SpacerEdge, twin_spacer
+from slenderpy.legacy import force as legacy_force
 
 
 def visualize_bundle_3d(

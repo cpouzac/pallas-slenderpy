@@ -16,7 +16,7 @@ cable over time, and a mid-span snapshot showing the energy redistribution.
 import matplotlib.pyplot as plt
 import numpy as np
 
-from slenderpy import simulation 
+from slenderpy import simulation
 from slenderpy.cable.bundle.bundle import Bundle, InitialConditions
 from slenderpy.cable.bundle.cable import Cable
 from slenderpy.cable.bundle.spacer import Spacer, SpacerEdge

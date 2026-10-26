@@ -77,7 +77,7 @@ def run() -> None:
     fig, (ax_map, ax_rms) = plt.subplots(1, 2, figsize=(12, 5))
 
     s_phys = np.array(los) * cable.length
-    extent = (s_phys[0], s_phys[-1], t_axis[-1], t_axis[0])
+    #extent = (s_phys[0], s_phys[-1], t_axis[-1], t_axis[0])
     vmax = max(np.max(np.abs(un0)), np.max(np.abs(un1)))
     ax_map.imshow(
         np.concatenate([un0, un1], axis=1),

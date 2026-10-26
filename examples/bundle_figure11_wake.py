@@ -99,7 +99,7 @@ def run() -> None:
     # Compute effective drag at mid-span for each cable from the last
     # state (after transient): re-evaluate the wake coefficients at the
     # current relative positions.
-    last_un = [res.data[f"un_{i}"].values[-1] for i in range(3)]
+    # last_un = [res.data[f"un_{i}"].values[-1] for i in range(3)]
     last_ub = [res.data[f"ub_{i}"].values[-1] for i in range(3)]
     cd_curve = []
     for i in range(3):
