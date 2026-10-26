@@ -30,15 +30,15 @@ from typing import List, Tuple
 import numpy as np
 import plotly.graph_objects as go
 
-from slenderpy import force as legacy_force
-from slenderpy import simtools
-from slenderpy.cable.dynamic.bundle import Bundle
-from slenderpy.cable.dynamic.cable import Cable
-from slenderpy.cable.dynamic.spacer import Spacer, SpacerEdge, twin_spacer
+from slenderpy.legacy import force as legacy_force
+from slenderpy import simulation
+from slenderpy.cable.bundle.bundle import Bundle
+from slenderpy.cable.bundle.cable import Cable
+from slenderpy.cable.bundle.spacer import Spacer, SpacerEdge, twin_spacer
 
 
 def visualize_bundle_3d(
-    res: simtools.Results,
+    res: simulation.Results,
     bundle: Bundle,
     bundle_geometry: List[Tuple[float, float]],
     *,
@@ -50,7 +50,7 @@ def visualize_bundle_3d(
 
     Parameters
     ----------
-    res : slenderpy.simtools.Results
+    res : slenderpy.simulation.Results
         Output of ``Bundle.solve``. Must carry per-sub-conductor
         ``un_i`` and ``ub_i`` traces.
     bundle : Bundle
@@ -274,7 +274,7 @@ def twin_bundle_aeolian() -> go.Figure:
 
     ns = 81
     los = np.linspace(0.0, 1.0, ns)[1:-1].tolist()
-    pm = simtools.Parameters(
+    pm = simulation.Parameters(
         ns=ns,
         t0=0.0,
         tf=6.0,
@@ -353,7 +353,7 @@ def triple_bundle_aeolian() -> go.Figure:
     # and a denser spatial grid to resolve the shorter wavelength.
     ns = 121
     los = np.linspace(0.0, 1.0, ns)[1:-1].tolist()
-    pm = simtools.Parameters(
+    pm = simulation.Parameters(
         ns=ns,
         t0=0.0,
         tf=3.0,
