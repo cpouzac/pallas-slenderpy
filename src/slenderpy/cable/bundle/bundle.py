@@ -334,8 +334,7 @@ class Bundle:
                 ds_local = 0.5 * (ds[full_idx - 1] + ds[full_idx])
                 ds_dim = ds_local * L
                 interior_idx_left = interior_idx
-                interior_idx_right = None
-
+                interior_idx_right = interior_idx
 
         # 2D SPACER
         else:
@@ -376,12 +375,14 @@ class Bundle:
                 
                 ds_dim = ds_local * L
                 
+
+
             edges_nd = []
             for e in spacer.edges:
-                K_nd_n = e.k_n / (m * g * ds_dim) * L
-                C_nd_n = e.c_n / (m * g * ds_dim * tAd) * L
-                K_nd_b = e.k_b / (m * g * ds_dim) * L
-                C_nd_b = e.c_b / (m * g * ds_dim * tAd) * L
+                K_nd_n = e.k_n / (4 * m * g * ds_dim) * L
+                C_nd_n = e.c_n / (4 * m * g * ds_dim * tAd) * L
+                K_nd_b = e.k_b / (4 * m * g * ds_dim) * L
+                C_nd_b = e.c_b / (4 * m * g * ds_dim * tAd) * L
                 
                 J_b_nd = e.j_b / (m * g * ds_dim) * L
                 J_t_nd = e.j_t / (m * g * ds_dim) * L
@@ -565,13 +566,13 @@ def _assemble_with_spacers(
     # plane) and inject the explicit-state portion of the reaction into
     # the RHS.
 
-
-
+    
     for sp_d in spacer_data:
-        k_idx_left = sp_d["interior_idx_left"]
-        k_idx_right = sp_d["interior_idx_right"]
-
-        full_k_left = k_idx_left + 1  # corresponding full-grid index
+        idx_L = sp_d["interior_idx_left"]
+        idx_R = sp_d.get("interior_idx_right")
+  
+        full_L = idx_L + 1
+        full_R = idx_R + 1
 
         for e in sp_d["edges"]:
             i = e["i"]
@@ -585,23 +586,37 @@ def _assemble_with_spacers(
             dn = e["delta_n"]
             db = e["delta_b"]
 
-            # Implicit coefficient on v^{n+1}: dt * 0.5 * (K * ht + Cd).
-            # Symmetric, applied to vn-vn coupling and vb-vb coupling.
-            coup = dt * 0.5 * (K * ht + Cd)
+            coup_K_n = dt * 0.5 * (K_n * ht + Cd_n)
+            coup_K_b = dt * 0.5 * (K_b * ht + Cd_b)
+            coup_J_n = dt * 0.5 * (Jb * ht)
+            coup_J_b = dt * 0.5 * (Jt * ht)
 
-            # vn coupling
             M_i_vn = blocks[2 * i]
             M_j_vn = blocks[2 * j]
-            M_i_vn[k_idx, k_idx] += coup
-            M_j_vn[k_idx, k_idx] += coup
-            # Need off-diagonal coupling between vn_i and vn_j blocks
-            # (added below via _add_cross_block).
-
-            # vb coupling
             M_i_vb = blocks[2 * i + 1]
             M_j_vb = blocks[2 * j + 1]
-            M_i_vb[k_idx, k_idx] += coup
-            M_j_vb[k_idx, k_idx] += coup
+
+            # Composante normale (vn)
+            M_i_vn[idx_L, idx_L] += (coup_K_n + coup_J_n)
+            M_i_vn[idx_L, idx_R] += (coup_K_n - coup_J_n)
+            M_i_vn[idx_R, idx_L] += (coup_K_n - coup_J_n)
+            M_i_vn[idx_R, idx_R] += (coup_K_n + coup_J_n)
+            
+            M_j_vn[idx_L, idx_L] += (coup_K_n + coup_J_n)
+            M_j_vn[idx_L, idx_R] += (coup_K_n - coup_J_n)
+            M_j_vn[idx_R, idx_L] += (coup_K_n - coup_J_n)
+            M_j_vn[idx_R, idx_R] += (coup_K_n + coup_J_n)
+
+            # Composante binormale (vb)
+            M_i_vb[idx_L, idx_L] += (coup_K_b + coup_J_b)
+            M_i_vb[idx_L, idx_R] += (coup_K_b - coup_J_b)
+            M_i_vb[idx_R, idx_L] += (coup_K_b - coup_J_b)
+            M_i_vb[idx_R, idx_R] += (coup_K_b + coup_J_b)
+            
+            M_j_vb[idx_L, idx_L] += (coup_K_b + coup_J_b)
+            M_j_vb[idx_L, idx_R] += (coup_K_b - coup_J_b)
+            M_j_vb[idx_R, idx_L] += (coup_K_b - coup_J_b)
+            M_j_vb[idx_R, idx_R] += (coup_K_b + coup_J_b)
 
             # Explicit-state portion of the reaction at this node, in n
             # and b components, on cable i (cable j is opposite).
@@ -610,43 +625,79 @@ def _assemble_with_spacers(
             #   f_i_n^expl = -K*(un_i - un_j - dn) - 0.5*(Cd + K*ht)*(vn_i - vn_j)
             #   f_i_b^expl = -K*(ub_i - ub_j - db) - 0.5*(Cd + K*ht)*(vb_i - vb_j)
             # multiplied by dt to enter the v-update equation.
-            dun = un[i, full_k] - un[j, full_k] - dn
-            dub = ub[i, full_k] - ub[j, full_k] - db
-            dvn = vn[i, full_k] - vn[j, full_k]
-            dvb = vb[i, full_k] - vb[j, full_k]
-            f_i_n = -K * dun - 0.5 * (Cd + K * ht) * dvn
-            f_i_b = -K * dub - 0.5 * (Cd + K * ht) * dvb
-            Rvn[i, k_idx] += dt * f_i_n
-            Rvn[j, k_idx] -= dt * f_i_n
-            Rvb[i, k_idx] += dt * f_i_b
-            Rvb[j, k_idx] -= dt * f_i_b
+            dun_2d = (un[i, full_L] + un[i, full_R]) - (un[j, full_L] + un[j, full_R]) - 2.0 * dn
+            dvn_2d = (vn[i, full_L] + vn[i, full_R]) - (vn[j, full_L] + vn[j, full_R])
+            dub_2d = (ub[i, full_L] + ub[i, full_R]) - (ub[j, full_L] + ub[j, full_R]) - 2.0 * db
+            dvb_2d = (vb[i, full_L] + vb[i, full_R]) - (vb[j, full_L] + vb[j, full_R])
+
+            f_i_n_trans = -K_n * dun_2d - 0.5 * (Cd_n + K_n * ht) * dvn_2d
+            f_i_b_trans = -K_b * dub_2d - 0.5 * (Cd_b + K_b * ht) * dvb_2d
+
+            f_i_n_tors_L = -Jb * ((un[i, full_L] - un[i, full_R]) - (un[j, full_L] - un[j, full_R]))
+            f_i_b_tors_L = -Jt * ((ub[i, full_L] - ub[i, full_R]) - (ub[j, full_L] - ub[j, full_R]))
+
+            Rvn[i, idx_L] += dt * (f_i_n_trans + f_i_n_tors_L)
+            Rvn[j, idx_L] -= dt * (f_i_n_trans + f_i_n_tors_L) 
+            Rvb[i, idx_L] += dt * (f_i_b_trans + f_i_b_tors_L)
+            Rvb[j, idx_L] -= dt * (f_i_b_trans + f_i_b_tors_L)
+
+            Rvn[i, idx_R] += dt * (f_i_n_trans - f_i_n_tors_L)
+            Rvn[j, idx_R] -= dt * (f_i_n_trans - f_i_n_tors_L)
+            Rvb[i, idx_R] += dt * (f_i_b_trans - f_i_b_tors_L)
+            Rvb[j, idx_R] -= dt * (f_i_b_trans - f_i_b_tors_L)
 
     # Build block-diagonal portion first, then inject off-diagonal spacer
     # couplings. Block ordering: [vn_0, vb_0, vn_1, vb_1, ...].
     M_block = scipy.sparse.block_diag(blocks, format="lil")
 
     for sp_d in spacer_data:
-        k_idx = sp_d["interior_idx"]
+        idx_L = sp_d["interior_idx_left"]
+        idx_R = sp_d.get("interior_idx_right")
+        if idx_R is None:
+            idx_R = idx_L
+
         for e in sp_d["edges"]:
             i = e["i"]
             j = e["j"]
-            K = e["K_nd"]
-            Cd = e["C_nd"]
-            coup = dt * 0.5 * (K * ht + Cd)
+            K_n = e["K_nd_n"]
+            Cd_n = e["C_nd_n"]
+            K_b = e["K_nd_b"]
+            Cd_b = e["C_nd_b"]
+            Jb = e["J_b_nd"]
+            Jt = e["J_t_nd"]
+            dn = e["delta_n"]
+            db = e["delta_b"]
 
-            # Off-diagonal entries (vn_i row, vn_j col) and vice versa.
-            row_vn_i = (2 * i) * n + k_idx
-            col_vn_j = (2 * j) * n + k_idx
-            row_vn_j = (2 * j) * n + k_idx
-            col_vn_i = (2 * i) * n + k_idx
-            M_block[row_vn_i, col_vn_j] -= coup
-            M_block[row_vn_j, col_vn_i] -= coup
+            coup_K_n = dt * 0.5 * (K_n * ht + Cd_n)
+            coup_K_b = dt * 0.5 * (K_b * ht + Cd_b)
+            coup_J_n = dt * 0.5 * (Jb * ht)
+            coup_J_b = dt * 0.5 * (Jt * ht)
 
-            row_vb_i = (2 * i + 1) * n + k_idx
-            col_vb_j = (2 * j + 1) * n + k_idx
-            row_vb_j = (2 * j + 1) * n + k_idx
-            col_vb_i = (2 * i + 1) * n + k_idx
-            M_block[row_vb_i, col_vb_j] -= coup
-            M_block[row_vb_j, col_vb_i] -= coup
+            base_i_vn = = (2 * i) * n
+            base_j_vn = (2 * j) * n
+            base_i_vb = (2 * i + 1) * n
+            base_j_vb = (2 * j + 1) * n
+
+            # Composante normale (vn)
+            M_block[base_i_vn + idx_L, base_j_vn + idx_L] -= (coup_K_n + coup_J_n)
+            M_block[base_i_vn + idx_L, base_j_vn + idx_R] -= (coup_K_n - coup_J_n)
+            M_block[base_i_vn + idx_R, base_j_vn + idx_L] -= (coup_K_n - coup_J_n)
+            M_block[base_i_vn + idx_R, base_j_vn + idx_R] -= (coup_K_n + coup_J_n)
+
+            M_block[base_j_vn + idx_L, base_i_vn + idx_L] -= (coup_K_n + coup_J_n)
+            M_block[base_j_vn + idx_L, base_i_vn + idx_R] -= (coup_K_n - coup_J_n)
+            M_block[base_j_vn + idx_R, base_i_vn + idx_L] -= (coup_K_n - coup_J_n)
+            M_block[base_j_vn + idx_R, base_i_vn + idx_R] -= (coup_K_n + coup_J_n)
+
+            # Composante binormale (vb)
+            M_block[base_i_vb + idx_L, base_j_vb + idx_L] -= (coup_K_b + coup_J_b)
+            M_block[base_i_vb + idx_L, base_j_vb + idx_R] -= (coup_K_b - coup_J_b)
+            M_block[base_i_vb + idx_R, base_j_vb + idx_L] -= (coup_K_b - coup_J_b)
+            M_block[base_i_vb + idx_R, base_j_vb + idx_R] -= (coup_K_b + coup_J_b)
+
+            M_block[base_j_vb + idx_L, base_i_vb + idx_L] -= (coup_K_b + coup_J_b)
+            M_block[base_j_vb + idx_L, base_i_vb + idx_R] -= (coup_K_b - coup_J_b)
+            M_block[base_j_vb + idx_R, base_i_vb + idx_L] -= (coup_K_b - coup_J_b)
+            M_block[base_j_vb + idx_R, base_i_vb + idx_R] -= (coup_K_b + coup_J_b)
 
     return M_block.tocsr(), Rvn, Rvb
