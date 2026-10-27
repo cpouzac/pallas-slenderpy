@@ -67,8 +67,8 @@ class SpacerEdge:
     delta_n: float = 0.0
     delta_b: float = 0.0
     width: float = 0.0
-    j_t: float = 0.0
     j_b: float = 0.0
+    j_t: float = 0.0
     is_2d: bool = False
 
     def __post_init__(self) -> None:

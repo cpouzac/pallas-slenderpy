@@ -333,31 +333,15 @@ class Bundle:
                 # so the localised point load is on the order of F / (ds * L).
                 ds_local = 0.5 * (ds[full_idx - 1] + ds[full_idx])
                 ds_dim = ds_local * L
-                edges_nd = []
-                for e in sp_.edges:
-                    K_nd_n = e.k_n / (m * g * ds_dim) * L
-                    C_nd_n = e.c_n / (m * g * ds_dim * tAd) * L
-                    K_nd_b = e.k_b / (m * g * ds_dim) * L
-                    C_nd_b = e.c_b / (m * g * ds_dim * tAd) * L
-                    # Rest offsets are stored non-dim (relative to L).
-                    edges_nd.append(
-                        {
-                            "i": e.i,
-                            "j": e.j,
-                            "K_nd_n": K_nd_n,
-                            "C_nd_n": C_nd_n,
-                            "K_nd_b": K_nd_b,
-                            "C_nd_b": C_nd_b,
-                            "delta_n": e.delta_n / L,
-                            "delta_b": e.delta_b / L,
-                        }
-                    )
-                data.append({"interior_idx": interior_idx, "edges": edges_nd})
+                interior_idx_left = interior_idx
+                interior_idx_right = None
+
 
         # 2D SPACER
         else:
             is_uniform = np.allclose(ds, ds[0])
             for spacer in self.spacers:
+
                 if is_uniform:
                     # UNIFORM MESH
                     w_nd = ds[0]
@@ -392,37 +376,37 @@ class Bundle:
                 
                 ds_dim = ds_local * L
                 
-                edges_nd = []
-                for e in spacer.edges:
-                    K_nd_n = e.k_n / (m * g * ds_dim) * L
-                    C_nd_n = e.c_n / (m * g * ds_dim * tAd) * L
-                    K_nd_b = e.k_b / (m * g * ds_dim) * L
-                    C_nd_b = e.c_b / (m * g * ds_dim * tAd) * L
-                    
-                    J_n_nd = e.j_n / (m * g * ds_dim) * L
-                    J_b_nd = e.j_b / (m * g * ds_dim) * L
-                    
-                    edges_nd.append(
-                        {
-                            "i": e.i,
-                            "j": e.j,
-                            "K_nd_n": K_nd_n,
-                            "C_nd_n": C_nd_n,
-                            "K_nd_b": K_nd_b,
-                            "C_nd_b": C_nd_b,
-                            "delta_n": e.delta_n / L,
-                            "delta_b": e.delta_b / L,
-                            "J_n_nd": J_n_nd,
-                            "J_b_nd": J_b_nd,
-                            "width_nd": w_nd,
-                        }
-                    )
+            edges_nd = []
+            for e in spacer.edges:
+                K_nd_n = e.k_n / (m * g * ds_dim) * L
+                C_nd_n = e.c_n / (m * g * ds_dim * tAd) * L
+                K_nd_b = e.k_b / (m * g * ds_dim) * L
+                C_nd_b = e.c_b / (m * g * ds_dim * tAd) * L
                 
-                data.append({
-                    "interior_idx_left": interior_idx_left,
-                    "interior_idx_right": interior_idx_right,
-                    "edges": edges_nd
-                })
+                J_b_nd = e.j_b / (m * g * ds_dim) * L
+                J_t_nd = e.j_t / (m * g * ds_dim) * L
+                
+                edges_nd.append(
+                    {
+                        "i": e.i,
+                        "j": e.j,
+                        "K_nd_n": K_nd_n,
+                        "C_nd_n": C_nd_n,
+                        "K_nd_b": K_nd_b,
+                        "C_nd_b": C_nd_b,
+                        "delta_n": e.delta_n / L,
+                        "delta_b": e.delta_b / L,
+                        "J_b_nd": J_b_nd,
+                        "J_t_nd": J_t_nd,
+                        "width_nd": w_nd,
+                    }
+                )
+            
+            data.append({
+                "interior_idx_left": interior_idx_left,
+                "interior_idx_right": interior_idx_right,
+                "edges": edges_nd
+            })
 
 
         return data
@@ -580,14 +564,24 @@ def _assemble_with_spacers(
     # components, since the spacer is isotropic in the perpendicular
     # plane) and inject the explicit-state portion of the reaction into
     # the RHS.
+
+
+
     for sp_d in spacer_data:
-        k_idx = sp_d["interior_idx"]
-        full_k = k_idx + 1  # corresponding full-grid index
+        k_idx_left = sp_d["interior_idx_left"]
+        k_idx_right = sp_d["interior_idx_right"]
+
+        full_k_left = k_idx_left + 1  # corresponding full-grid index
+
         for e in sp_d["edges"]:
             i = e["i"]
             j = e["j"]
-            K = e["K_nd"]
-            Cd = e["C_nd"]
+            K_n = e["K_nd_n"]
+            Cd_n = e["C_nd_n"]
+            K_b = e["K_nd_b"]
+            Cd_b = e["C_nd_b"]
+            Jb = e["J_b_nd"]
+            Jt = e["J_t_nd"]
             dn = e["delta_n"]
             db = e["delta_b"]
 
