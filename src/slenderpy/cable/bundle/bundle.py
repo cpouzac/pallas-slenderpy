@@ -25,7 +25,7 @@ import scipy.sparse
 import scipy.sparse.linalg
 
 from slenderpy import _progress_bar as _spb
-from slenderpy import fdm_utils as _fdm
+from slenderpy import fd_utils as _fdm
 from slenderpy import simulation
 from slenderpy.cable.bundle.cable import Cable
 from slenderpy.cable.bundle.spacer import Spacer
