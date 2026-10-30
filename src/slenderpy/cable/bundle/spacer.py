@@ -64,12 +64,14 @@ class SpacerEdge:
     c_n: float
     k_b: float
     c_b: float
+    is_2d: bool = False
     delta_n: float = 0.0
     delta_b: float = 0.0
-    width: float = 0.0
     j_b: float = 0.0
     j_t: float = 0.0
-    is_2d: bool = False
+    width: float = 0.0
+    
+    
 
     def __post_init__(self) -> None:
         if self.i == self.j:
@@ -139,20 +141,43 @@ class Spacer:
         object.__setattr__(self, 'width', common_width)
 
 
-def twin_spacer(s: float, k_perp: float, c_perp: float) -> Spacer:
+def twin_spacer(s: float, k_n: float, c_n: float, k_b: float, c_b: float, is_2d: bool
+                delta_n: float, delta_b: float, j_b: float, j_t: float, width: float, ) -> Spacer:
     """Build the common two-sub-conductor spacer (edge 0-1, zero rest offset).
 
     Parameters
     ----------
     s : float
         Curvilinear location in ]0, 1[.
-    k_perp : float
-        Translational stiffness (N/m).
-    c_perp : float
-        Translational damping (N.s/m).
+    width : float
+        Spacer width (m) MUST BE THE VALUE OF THE X STEP.
+    k_n : float
+        Translational stiffness (N/m), in the normal direction.
+    c_n : float
+        Translational damping (N.s/m), in the normal direction.
+    k_b : float
+        Translational stiffness (N/m), in the normal direction.
+    c_b : float
+        Translational damping (N.s/m), in the normal direction.
+    j_t : float
+        Angular stiffness of the restoring moment about vertical direction, in N/rad.
+    j_b : float
+        Angular stiffness of the restoring moment about binormal direction, in N/rad.
+    delta_n, delta_b : float
+        Rest offset (m) between sub-conductor i and sub-conductor j in the
+        normal and binormal directions. For most bundles the static
+        equilibrium catenaries already encode the geometric offset, so the
+        common case is delta_n = delta_b = 0 (the spacer exerts no force at
+        rest because the state is the offset from static equilibrium).
+    is_2d: bool
+        Inicates if the SpacerEdge is 2D or not.
 
     Returns
     -------
     Spacer
+    
     """
-    return Spacer(s=s, edges=(SpacerEdge(i=0, j=1, k_perp=k_perp, c_perp=c_perp),))
+
+    return Spacer(s=s, edges=(SpacerEdge(i=0, j=1, k_n=k_n, c_n=c_n, k_b=k_b, c_b=c_b, 
+                  is_2d = is_2d, delta_n = delta_n, delta_b = delta_b, j_b = j_b, j_t = j_t, width = width)), 
+                  is_2d = is_2d, width = width )
