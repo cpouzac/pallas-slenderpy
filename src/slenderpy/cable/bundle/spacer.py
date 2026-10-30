@@ -71,7 +71,7 @@ class SpacerEdge:
     j_b: float = 0.0
     j_t: float = 0.0
     width: float = 0.0
-    
+    l0: float = 0.0
     
 
     def __post_init__(self) -> None:
@@ -143,7 +143,7 @@ class Spacer:
 
 
 def twin_spacer(s: float, k_n: float, c_n: float, k_b: float, c_b: float, is_2d: bool,
-                delta_n: float, delta_b: float, j_b: float, j_t: float, width: float ) -> Spacer:
+                delta_n: float, delta_b: float, j_b: float, j_t: float, width: float, l0: float ) -> Spacer:
     """Build the common two-sub-conductor spacer (edge 0-1, zero rest offset).
 
     Parameters
@@ -180,5 +180,5 @@ def twin_spacer(s: float, k_n: float, c_n: float, k_b: float, c_b: float, is_2d:
     """
 
     return Spacer(s=s, edges=(SpacerEdge(i=0, j=1, k_n=k_n, c_n=c_n, k_b=k_b, c_b=c_b, 
-                  is_2d = is_2d, delta_n = delta_n, delta_b = delta_b, j_b = j_b, j_t = j_t, width = width), ), 
+                  is_2d = is_2d, delta_n = delta_n, delta_b = delta_b, j_b = j_b, j_t = j_t, width = width, l0 = l0), ), 
                   is_2d = is_2d, width = width)

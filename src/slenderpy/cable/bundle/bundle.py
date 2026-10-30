@@ -107,11 +107,11 @@ class Bundle:
         return len(self.cables)
 
     def solve(
-        self,
+        self, is_uniform,
         parameters: simulation.Parameters,
         force: Optional[Callable] = None,
         zt: float = 0.0,
-        initial_conditions: Optional[InitialConditions] = None,
+        initial_conditions: Optional[InitialConditions] = None
     ) -> simulation.Results:
         """Run the dynamic simulation.
 
@@ -147,15 +147,7 @@ class Bundle:
         ds = np.diff(s)
         n = ns - 2
 
-        # FD operators (shared across all cables since the grid is shared).
-        # C : (ns, ns) first-derivative operator, A : (n, n) second-derivative
-        # operator with Dirichlet zero boundary.
-        C = _fdm.d1M(ds)
-        A = _fdm.d2M(ds)
-        A_csr = A.tocsr()
-        Adiag0 = A.diagonal(k=0)
-        Adiag1 = A.diagonal(k=1)
-        Adiagm1 = A.diagonal(k=-1)
+        
 
         # Per-cable non-dimensionalisation. All cables share L, m, g (enforced
         # at construction), so tAd, uAd are identical; only vt2, vl2 vary if
@@ -167,6 +159,20 @@ class Bundle:
         uAd = L / tAd
         vt2 = np.array([cb.vt2 for cb in self.cables])
         vl2 = np.array([cb.vl2 for cb in self.cables])
+
+        # Spacer pre-processing: precompute interior-node index and non-dim
+        # coefficients per edge.
+        spacer_data = self._prepare_spacers(ds, L, m, g, tAd, is_uniform)
+
+        # FD operators (shared across all cables since the grid is shared).
+        # C : (ns, ns) first-derivative operator, A : (n, n) second-derivative
+        # operator with Dirichlet zero boundary.
+        C = _fdm.d1M(ds)
+        A = _fdm.d2M(ds)
+        A_csr = A.tocsr()
+        Adiag0 = A.diagonal(k=0)
+        Adiag1 = A.diagonal(k=1)
+        Adiagm1 = A.diagonal(k=-1)
 
         # Non-dim time stepping. Match legacy convention: dt is divided by
         # tAd, ht = dt/2, tau = -ht**2 (the implicit operator coefficient).
@@ -190,9 +196,7 @@ class Bundle:
             _fill_initial(vn, initial_conditions.vn, scale=1.0 / uAd)
             _fill_initial(vb, initial_conditions.vb, scale=1.0 / uAd)
 
-        # Spacer pre-processing: precompute interior-node index and non-dim
-        # coefficients per edge.
-        spacer_data = self._prepare_spacers(ds, L, m, g, tAd)
+        
 
         # Output container. Per-cable variable names so simulation.multiplot
         # superimposes sub-conductors at each output location.
@@ -309,7 +313,7 @@ class Bundle:
         return res
 
     def _prepare_spacers(
-        self, ds: np.ndarray, L: float, m: float, g: float, tAd: float
+        self, ds: np.ndarray, L: float, m: float, g: float, tAd: float, is_uniform: bool
     ) -> List[dict]:
         """Resolve spacer locations to grid indices and compute non-dim
         coefficients per edge. Returned list mirrors ``self.spacers``."""
@@ -340,7 +344,6 @@ class Bundle:
 
         # 2D SPACER
         else:
-            is_uniform = np.allclose(ds, ds[0])
             for spacer in self.spacers:
 
                 if is_uniform:
@@ -356,7 +359,7 @@ class Bundle:
                 else:
                     # IRREGULAR MESH 
                     w_dim = spacer.width  
-                    w_nd = w_dim / L
+                    w_nd = w_dim 
              
                     full_idx = int(round(spacer.s * (ns - 1)))
                     
@@ -364,12 +367,16 @@ class Bundle:
                     full_idx_right = full_idx + 1
                     
                     # Mesh adaptation
+                    print("ds[full_idx] = ", ds[full_idx])
                     ds[full_idx] = w_nd
                     ds_local = w_nd
 
+                    print("ds_local = ", ds_local)
+
                 interior_idx_left = full_idx_left - 1
                 interior_idx_right = full_idx_right - 1
-                
+                print('interior_idx_left = ', interior_idx_left, 'interior_idx_right = ', interior_idx_right)
+
                 if interior_idx_left < 0 or interior_idx_right >= ns - 2:
                     raise ValueError(
                         f"2D spacer at s={spacer.s} overlaps boundary nodes : move it further inside the span."
@@ -385,9 +392,8 @@ class Bundle:
             C_nd_n = e.c_n / (4 * m * g * ds_dim * tAd) * L
             K_nd_b = e.k_b / (4 * m * g * ds_dim) * L
             C_nd_b = e.c_b / (4 * m * g * ds_dim * tAd) * L
-            
-            J_b_nd = e.j_b / (m * g * ds_dim) * L
-            J_t_nd = e.j_t / (m * g * ds_dim) * L
+            J_b_nd = (e.j_b * ds_local / (e.l0**3)) * (L / (m * g))
+            J_t_nd = (e.j_t * ds_local / (e.l0**3)) * (L / (m * g))
             
             edges_nd.append(
                 {

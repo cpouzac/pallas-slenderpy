@@ -39,11 +39,12 @@ def run() -> None:
     bundle = Bundle(
         cables=[cable, cable],
         spacers=[twin_spacer(s=0.5, k_n=5.0e4, c_n=200.0, k_b=5.0e4, c_b=200.0,
-                             is_2d = False, delta_n=0.0, delta_b=0.0, j_b=0.0, j_t=0.0, width=0.0)],
+                             is_2d = True, delta_n=0.0, delta_b=0.0, j_b=200, j_t=200, width=0.035, l0 = 0.4)],
     )
 
     ns = 81
     los = np.linspace(0.0, 1.0, ns)[1:-1].tolist()
+    is_uniform = False
     params = simulation.Parameters(
         ns=ns,
         t0=0.0,
@@ -66,7 +67,7 @@ def run() -> None:
     bump[-1] = 0.0
     ic = InitialConditions(un=[bump, np.zeros(ns)])
 
-    res = bundle.solve(params, force=None, zt=0.0, initial_conditions=ic)
+    res = bundle.solve(is_uniform, params, force=None, zt=0.0, initial_conditions=ic)
 
     t_axis = np.asarray(res.lot())
     un0 = res.data["un_0"].values  # shape (nt, n_los)
