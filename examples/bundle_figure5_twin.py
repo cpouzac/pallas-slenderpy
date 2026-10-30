@@ -38,7 +38,8 @@ def run() -> None:
     cable = _aster570()
     bundle = Bundle(
         cables=[cable, cable],
-        spacers=[twin_spacer(s=0.5, k_perp=5.0e4, c_perp=200.0)],
+        spacers=[twin_spacer(s=0.5, k_n=5.0e4, c_n=200.0, k_b=5.0e4, c_b=200.0,
+                             is_2d = False, delta_n=0.0, delta_b=0.0, j_b=0.0, j_t=0.0, width=0.0)],
     )
 
     ns = 81

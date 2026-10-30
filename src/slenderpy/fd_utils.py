@@ -19,6 +19,8 @@ gives a Newton iteration something to measure its residual against.
 
 import numpy as np
 import scipy as sp
+import scipy.sparse
+from typing import Tuple, Optional
 
 
 def _boundary_rows(order: int) -> list[int]:

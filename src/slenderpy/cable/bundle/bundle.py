@@ -335,6 +335,8 @@ class Bundle:
                 ds_dim = ds_local * L
                 interior_idx_left = interior_idx
                 interior_idx_right = interior_idx
+                w_dim = spacer.width  
+                w_nd = w_dim / L
 
         # 2D SPACER
         else:
@@ -377,37 +379,37 @@ class Bundle:
                 
 
 
-            edges_nd = []
-            for e in spacer.edges:
-                K_nd_n = e.k_n / (4 * m * g * ds_dim) * L
-                C_nd_n = e.c_n / (4 * m * g * ds_dim * tAd) * L
-                K_nd_b = e.k_b / (4 * m * g * ds_dim) * L
-                C_nd_b = e.c_b / (4 * m * g * ds_dim * tAd) * L
-                
-                J_b_nd = e.j_b / (m * g * ds_dim) * L
-                J_t_nd = e.j_t / (m * g * ds_dim) * L
-                
-                edges_nd.append(
-                    {
-                        "i": e.i,
-                        "j": e.j,
-                        "K_nd_n": K_nd_n,
-                        "C_nd_n": C_nd_n,
-                        "K_nd_b": K_nd_b,
-                        "C_nd_b": C_nd_b,
-                        "delta_n": e.delta_n / L,
-                        "delta_b": e.delta_b / L,
-                        "J_b_nd": J_b_nd,
-                        "J_t_nd": J_t_nd,
-                        "width_nd": w_nd,
-                    }
-                )
+        edges_nd = []
+        for e in spacer.edges:
+            K_nd_n = e.k_n / (4 * m * g * ds_dim) * L
+            C_nd_n = e.c_n / (4 * m * g * ds_dim * tAd) * L
+            K_nd_b = e.k_b / (4 * m * g * ds_dim) * L
+            C_nd_b = e.c_b / (4 * m * g * ds_dim * tAd) * L
             
-            data.append({
-                "interior_idx_left": interior_idx_left,
-                "interior_idx_right": interior_idx_right,
-                "edges": edges_nd
-            })
+            J_b_nd = e.j_b / (m * g * ds_dim) * L
+            J_t_nd = e.j_t / (m * g * ds_dim) * L
+            
+            edges_nd.append(
+                {
+                    "i": e.i,
+                    "j": e.j,
+                    "K_nd_n": K_nd_n,
+                    "C_nd_n": C_nd_n,
+                    "K_nd_b": K_nd_b,
+                    "C_nd_b": C_nd_b,
+                    "delta_n": e.delta_n / L,
+                    "delta_b": e.delta_b / L,
+                    "J_b_nd": J_b_nd,
+                    "J_t_nd": J_t_nd,
+                    "width_nd": w_nd,
+                }
+            )
+        
+        data.append({
+            "interior_idx_left": interior_idx_left,
+            "interior_idx_right": interior_idx_right,
+            "edges": edges_nd
+        })
 
 
         return data
@@ -673,7 +675,7 @@ def _assemble_with_spacers(
             coup_J_n = dt * 0.5 * (Jb * ht)
             coup_J_b = dt * 0.5 * (Jt * ht)
 
-            base_i_vn = = (2 * i) * n
+            base_i_vn =  (2 * i) * n
             base_j_vn = (2 * j) * n
             base_i_vb = (2 * i + 1) * n
             base_j_vb = (2 * j + 1) * n
@@ -699,5 +701,7 @@ def _assemble_with_spacers(
             M_block[base_j_vb + idx_L, base_i_vb + idx_R] -= (coup_K_b - coup_J_b)
             M_block[base_j_vb + idx_R, base_i_vb + idx_L] -= (coup_K_b - coup_J_b)
             M_block[base_j_vb + idx_R, base_i_vb + idx_R] -= (coup_K_b + coup_J_b)
+
+            
 
     return M_block.tocsr(), Rvn, Rvb
