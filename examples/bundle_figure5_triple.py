@@ -44,16 +44,33 @@ def run() -> None:
         (0.5 * side, side * np.sqrt(3.0) / 2.0),
     ]
 
-    k_perp = 5.0e4
-    c_perp = 200.0
+    k_n = 5.0e4
+    c_n = 200.0
+    k_b = 5.0e4
+    c_b = 200.0
+    is_2d = True
+    delta_n=0.0
+    delta_b=0.0
+    j_b=200
+    j_t=200
+    width=0.035
+    l0 = 0.4
+
     spacer = Spacer(
         s=0.5,
         edges=(
-            SpacerEdge(i=0, j=1, k_perp=k_perp, c_perp=c_perp),
-            SpacerEdge(i=1, j=2, k_perp=k_perp, c_perp=c_perp),
-            SpacerEdge(i=0, j=2, k_perp=k_perp, c_perp=c_perp),
-        ),
+            SpacerEdge(i=0, j=1, k_n=k_n, c_n=c_n, k_b=k_b, c_b=c_b, 
+                  is_2d = is_2d, delta_n = delta_n, delta_b = delta_b, 
+                  j_b = j_b, j_t = j_t, width = width, l0 = l0),
+            SpacerEdge(i=1, j=2, k_n=k_n, c_n=c_n, k_b=k_b, c_b=c_b, 
+                  is_2d = is_2d, delta_n = delta_n, delta_b = delta_b, 
+                  j_b = j_b, j_t = j_t, width = width, l0 = l0),
+            SpacerEdge(i=0, j=2, k_n=k_n, c_n=c_n, k_b=k_b, c_b=c_b, 
+                  is_2d = is_2d, delta_n = delta_n, delta_b = delta_b, 
+                  j_b = j_b, j_t = j_t, width = width, l0 = l0),
+        ), is_2d = is_2d, width = width
     )
+
     bundle = Bundle(cables=[cable, cable, cable], spacers=[spacer])
 
     ns = 81
@@ -73,8 +90,8 @@ def run() -> None:
     bump[0] = 0.0
     bump[-1] = 0.0
     ic = InitialConditions(un=[bump, np.zeros(ns), np.zeros(ns)])
-
-    res = bundle.solve(params, force=None, zt=0.0, initial_conditions=ic)
+    is_uniform = False
+    res = bundle.solve(is_uniform, params, force=None, zt=0.0, initial_conditions=ic)
 
     t_axis = np.asarray(res.lot())
     un_all = np.stack(
@@ -133,9 +150,10 @@ def run() -> None:
                 un_all[i, k_snap] * 1e3,
                 color=f"C{i}",
                 alpha=0.4 + 0.2 * snap_times.index(st),
-                label=f"cable {i}, t={t_axis[k_snap]:.1f}s"
-                if st == snap_times[0]
-                else None,
+                label=f"cable {i}, t={t_axis[k_snap]:.1f}s",
+                # if st == snap_times[0]
+                # else None,
+                lw = 3.0 if i==1 else 1.2,
             )
     ax_snap.set_xlabel("s [m]")
     ax_snap.set_ylabel("normal displacement [mm]")
