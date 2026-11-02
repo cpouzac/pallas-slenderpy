@@ -36,12 +36,22 @@ def _aster570():
 def run() -> None:
     cable = _aster570()
 
-    # Equilateral triangle, side 0.40 m. Coordinates in (binormal, normal).
-    side = 0.40
+    l0_01 = 0.50  
+    l0_12 = 0.3
+    l0_02 = 0.70  
+
+    
+    b0, n0 = 0.0, 0.0
+    
+    b1, n1 = l0_01, 0.0
+    
+    b2 = (l0_01**2 + l0_02**2 - l0_12**2) / (2.0 * l0_01)
+    n2 = np.sqrt(l0_02**2 - b2**2)
+
     geometry = [
-        (0.0, 0.0),
-        (side, 0.0),
-        (0.5 * side, side * np.sqrt(3.0) / 2.0),
+        (b0, n0),
+        (b1, n1),
+        (b2, n2),
     ]
 
     k_n = 5.0e4
@@ -54,20 +64,19 @@ def run() -> None:
     j_b=200
     j_t=200
     width=0.035
-    l0 = 0.4
 
     spacer = Spacer(
         s=0.5,
         edges=(
             SpacerEdge(i=0, j=1, k_n=k_n, c_n=c_n, k_b=k_b, c_b=c_b, 
                   is_2d = is_2d, delta_n = delta_n, delta_b = delta_b, 
-                  j_b = j_b, j_t = j_t, width = width, l0 = l0),
+                  j_b = j_b, j_t = j_t, width = width, l0 = l0_01),
             SpacerEdge(i=1, j=2, k_n=k_n, c_n=c_n, k_b=k_b, c_b=c_b, 
                   is_2d = is_2d, delta_n = delta_n, delta_b = delta_b, 
-                  j_b = j_b, j_t = j_t, width = width, l0 = l0),
+                  j_b = j_b, j_t = j_t, width = width, l0 = l0_12),
             SpacerEdge(i=0, j=2, k_n=k_n, c_n=c_n, k_b=k_b, c_b=c_b, 
                   is_2d = is_2d, delta_n = delta_n, delta_b = delta_b, 
-                  j_b = j_b, j_t = j_t, width = width, l0 = l0),
+                  j_b = j_b, j_t = j_t, width = width, l0 = l0_02),
         ), is_2d = is_2d, width = width
     )
 
