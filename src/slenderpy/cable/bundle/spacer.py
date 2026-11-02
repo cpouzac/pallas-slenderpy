@@ -71,10 +71,18 @@ class SpacerEdge:
     j_b: float = 0.0
     j_t: float = 0.0
     width: float = 0.0
-    l0: float = 0.0
+    l0: float = 1.0
     
 
     def __post_init__(self) -> None:
+        if not self.is_2d:
+            object.__setattr__(self, 'delta_n', 0.0)
+            object.__setattr__(self, 'delta_b', 0.0)
+            object.__setattr__(self, 'j_b', 0.0)
+            object.__setattr__(self, 'j_t', 0.0)
+            object.__setattr__(self, 'width', 0.0)
+            object.__setattr__(self, 'l0', 1.0)
+
         if self.i == self.j:
             raise ValueError("SpacerEdge endpoints i and j must differ")
         if self.i < 0 or self.j < 0:
@@ -140,10 +148,11 @@ class Spacer:
         object.__setattr__(self, 'is_2d', common_is_2d)
         common_width = width_flags[0]
         object.__setattr__(self, 'width', common_width)
+   
 
 
 def twin_spacer(s: float, k_n: float, c_n: float, k_b: float, c_b: float, is_2d: bool,
-                delta_n: float, delta_b: float, j_b: float, j_t: float, width: float, l0: float ) -> Spacer:
+                delta_n: float, delta_b: float, j_b = 0.0, j_t = 0.0, width = 0.0, l0 = 0.0 ) -> Spacer:
     """Build the common two-sub-conductor spacer (edge 0-1, zero rest offset).
 
     Parameters
