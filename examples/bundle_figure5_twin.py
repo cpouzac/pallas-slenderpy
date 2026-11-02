@@ -183,13 +183,13 @@ def comparative_study():
     # No spacer
     print("Simulation: no spacer...")
     t, r0_none, r1_none = run_simulation(mode="None")
-    plt.plot(t, r0_none, color='grey', linestyle=':', linewidth=2, label="Câble 0 (No spacer)")
-    plt.plot(t, r1_none, color='black', linestyle='--', linewidth=2, label="Câble 1 (No spacer)")
+    # plt.plot(t, r0_none, color='grey', linestyle=':', linewidth=2, label="Cable 0 (No spacer)")
+    plt.plot(t, r1_none, color='black', linestyle='--', linewidth=2, label="Cable 1 (No spacer)")
     
     # 1D spacer
     print("Simulation: 1D...")
     t, r0_1d, r1_1d = run_simulation(mode="1D")
-    plt.plot(t, r0_1d, color='blue', linestyle='--', alpha=0.7, label="Cable 0 (1D)")
+    # plt.plot(t, r0_1d, color='blue', linestyle='--', alpha=0.7, label="Cable 0 (1D)")
     plt.plot(t, r1_1d, color='blue', linestyle='-', alpha=0.7, label="Cable 1 (1D)")
     
     # 2D spacer
@@ -200,17 +200,17 @@ def comparative_study():
         print(f"Simulation: 2D width = {w}m ...")
         t, r0_2d, r1_2d = run_simulation(mode="2D", width=w)
         # Cable 0
-        plt.plot(t, r0_2d, color=col, linestyle='--', alpha=0.7, label=f"Cable 0 (2D, width={w}m)")
+        # plt.plot(t, r0_2d, color=col, linestyle='--', alpha=0.7, label=f"Cable 0 (2D, width={w}m)")
         # Cable 1 
         plt.plot(t, r1_2d, color=col, linestyle='-', label=f"Cable 1 (2D, width={w}m)")
 
-    plt.xlabel("Temps [s]")
+    plt.xlabel("Time [s]")
     plt.ylabel("RMS normal displacement [mm]")
-    plt.title("Energy transfer: cable 0 (excited) and cable 1 (passive)")
+    plt.title("Energy transfer: cable 1 (passive) through cable 0 (excited)")
 
     plt.grid(True, alpha=0.3)
  
-    plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
+    plt.legend()
     plt.tight_layout()
     plt.show()
 
