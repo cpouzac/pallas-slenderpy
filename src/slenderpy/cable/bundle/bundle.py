@@ -107,7 +107,7 @@ class Bundle:
         return len(self.cables)
 
     def solve(
-        self, is_uniform,
+        self, is_uniform, spacer_data, ds, ns,
         parameters: simulation.Parameters,
         force: Optional[Callable] = None,
         zt: float = 0.0,
@@ -139,19 +139,6 @@ class Bundle:
             force traces named ``ut_i``, ``un_i``, ``ub_i``, ``ef_i``.
         """
         nc = self.n_cables
-
-        # Space grid: uniform [0, 1] with ns nodes; ds is the (ns-1) vector
-        # of cell widths, n = ns-2 is the interior size.
-        ns = parameters.ns
-        s = np.linspace(0.0, 1.0, ns)
-        ds = np.diff(s)
-        n = ns - 2
-
-        
-
-        # Per-cable non-dimensionalisation. All cables share L, m, g (enforced
-        # at construction), so tAd, uAd are identical; only vt2, vl2 vary if
-        # tensions or EA differ.
         L = self.cables[0].length
         m = self.cables[0].mass
         g = self.cables[0].g
@@ -160,10 +147,8 @@ class Bundle:
         vt2 = np.array([cb.vt2 for cb in self.cables])
         vl2 = np.array([cb.vl2 for cb in self.cables])
 
-        # Spacer pre-processing: precompute interior-node index and non-dim
-        # coefficients per edge.
-        spacer_data = self._prepare_spacers(ds, L, m, g, tAd, is_uniform)
 
+        n = ns - 2
         # FD operators (shared across all cables since the grid is shared).
         # C : (ns, ns) first-derivative operator, A : (n, n) second-derivative
         # operator with Dirichlet zero boundary.
@@ -195,6 +180,7 @@ class Bundle:
             _fill_initial(ub, initial_conditions.ub, scale=1.0 / L)
             _fill_initial(vn, initial_conditions.vn, scale=1.0 / uAd)
             _fill_initial(vb, initial_conditions.vb, scale=1.0 / uAd)
+        s = np.concatenate((np.array([0.0]), np.cumsum(ds)))
 
         
 
@@ -310,7 +296,7 @@ class Bundle:
                 res.data[f"{v}_{i}"] *= L
             res.data[f"ef_{i}"] *= self.cables[i].EA
 
-        return res
+        return res, ds
 
     def _prepare_spacers(
         self, ds: np.ndarray, L: float, m: float, g: float, tAd: float, is_uniform: bool
@@ -354,24 +340,56 @@ class Bundle:
                     full_idx_right = full_idx_left + 1
                     
                     full_idx = full_idx_left  
-                    ds_local = ds[0]
                     
                 else:
                     # IRREGULAR MESH 
                     w_dim = spacer.width  
-                    w_nd = w_dim 
-             
-                    full_idx = int(round(spacer.s * (ns - 1)))
-                    
-                    full_idx_left = full_idx
-                    full_idx_right = full_idx + 1
-                    
-                    # Mesh adaptation
-                    print("ds[full_idx] = ", ds[full_idx])
-                    ds[full_idx] = w_nd
+                    w_nd = w_dim/L
                     ds_local = w_nd
+                
+                    # Spacer edges
+                    x_center = spacer.s 
+                    x_left = x_center - w_nd / 2.0
+                    x_right = x_center + w_nd / 2.0
 
-                    print("ds_local = ", ds_local)
+                    # Closest mesh nodes of the spacer edges
+                    coord_nodes = np.cumsum(ds)
+                    idx_left = (np.abs(coord_nodes - x_left)).argmin()
+                    idx_right = (np.abs(coord_nodes - x_right)).argmin()
+
+                    if idx_left != idx_right:
+                        ds[idx_left] += x_left - coord_nodes[idx_left]
+                        ds[idx_left + 1] = w_nd
+                        ds[idx_left + 2] = coord_nodes[idx_right + 1] - x_right
+                        new_ds = ds
+
+                        # Deleting the nodes inside the spacer
+                        if (idx_left + 1) != idx_right:
+                            n_spacer = idx_right - (idx_left + 1)
+                            ns -= n_spacer
+                            new_ds = ds[::ns-1]
+
+
+                    else: # Adding a node
+                        new_ds = np.zeros(ns)
+                        ns += 1
+                        print("ds = ", ds)
+                        new_ds[:idx_left] = ds[:idx_left]
+                        print("new_ds[::idx_left] ", new_ds[:idx_left])
+                        new_ds[idx_left] = ds[idx_left] + x_left - coord_nodes[idx_left]
+                        new_ds[idx_left + 1] = w_nd
+                        new_ds[idx_left + 2] = coord_nodes[idx_right + 1] - x_right
+                        new_ds[idx_left + 3:] = ds[idx_left+2:]
+                        print("new ds = ", new_ds)
+                    
+
+                    full_idx_left = idx_left + 1
+                    full_idx_right = idx_left + 2
+                    
+                    print(f"Adaptation maillage : ")
+                    print(f"Bords physiques visés : {x_left}m -> {x_right}m")
+                    print(f"Indices du maillage   : {full_idx_left} -> {full_idx_right}")
+                    print(f"Nouvelle longueur câble : {np.sum(ds):.3f}m (Vérification)")
 
                 interior_idx_left = full_idx_left - 1
                 interior_idx_right = full_idx_right - 1
@@ -382,7 +400,7 @@ class Bundle:
                         f"2D spacer at s={spacer.s} overlaps boundary nodes : move it further inside the span."
                     )
                 
-                ds_dim = ds_local * L
+                ds_dim = w_nd * L
                 
 
 
@@ -393,6 +411,8 @@ class Bundle:
             K_nd_b = e.k_b / (4 * m * g * ds_dim) * L
             C_nd_b = e.c_b / (4 * m * g * ds_dim * tAd) * L
             J_b_nd = (e.j_b * ds_local / (e.l0**3)) * (L / (m * g))
+            print("jb = ", e.j_b)
+            print("J_b_nd = ", J_b_nd)
             J_t_nd = (e.j_t * ds_local / (e.l0**3)) * (L / (m * g))
             
             edges_nd.append(
@@ -418,7 +438,7 @@ class Bundle:
         })
 
 
-        return data
+        return data, new_ds, ns
 
     @staticmethod
     def _record(

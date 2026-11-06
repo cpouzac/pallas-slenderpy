@@ -43,12 +43,33 @@ def run() -> None:
     bundle = Bundle(
         cables=[cable, cable],
         spacers=[twin_spacer(s=0.5, k_n=5.0e4, c_n=200.0, k_b=5.0e4, c_b=200.0,
-                             is_2d = False, delta_n=0.0, delta_b=0.0, j_b=200, j_t=200, width=0.035, l0 = 0.4)],
+                             is_2d = True, delta_n=0.0, delta_b=0.0, j_b=200, j_t=200, width=0.020, l0 = 0.4)],
     )
 
     ns = 81
-    los = np.linspace(0.0, 1.0, ns)[1:-1].tolist()
     is_uniform = False
+    # Space grid: uniform [0, 1] with ns nodes; ds is the (ns-1) vector
+    # of cell widths, n = ns-2 is the interior size.
+    s = np.linspace(0.0, 1.0, ns)
+    ds = np.diff(s)
+
+    # Per-cable non-dimensionalisation. All cables share L, m, g (enforced
+    # at construction), so tAd, uAd are identical; only vt2, vl2 vary if
+    # tensions or EA differ.
+    L = bundle.cables[0].length
+    m = bundle.cables[0].mass
+    g = bundle.cables[0].g
+    tAd = float(np.sqrt(L / g))
+    uAd = L / tAd
+    vt2 = np.array([cb.vt2 for cb in bundle.cables])
+    vl2 = np.array([cb.vl2 for cb in bundle.cables])
+
+    # Spacer pre-processing: precompute interior-node index and non-dim
+    # coefficients per edge.
+    spacer_data, ds, ns = bundle._prepare_spacers(ds, L, m, g, tAd, is_uniform)
+
+    los = np.linspace(0.0, 1.0, ns)[1:-1].tolist()
+
     params = simulation.Parameters(
         ns=ns,
         t0=0.0,
@@ -64,14 +85,16 @@ def run() -> None:
     s_grid = np.linspace(0.0, 1.0, ns)
     s_centre = 0.30
     sigma = 0.05
-    bump = 0.01 * np.exp(-((s_grid - s_centre) ** 2) / (2.0 * sigma**2))
+    bump = 0.01 * np.exp(-((np.concatenate((np.array([0.0]), np.cumsum(ds))) - s_centre) ** 2) / (2.0 * sigma**2))
     # Force the boundary nodes to zero so the IC is compatible with the
     # Dirichlet boundary condition of the solver.
     bump[0] = 0.0
     bump[-1] = 0.0
+    print("len bump = ", len(bump))
+    print("ns = ", ns)
     ic = InitialConditions(un=[bump, np.zeros(ns)])
 
-    res = bundle.solve(is_uniform, params, force=None, zt=0.0, initial_conditions=ic)
+    res, _ = bundle.solve(is_uniform, spacer_data, ds, ns, params, force=None, zt=0.0, initial_conditions=ic)
 
     t_axis = np.asarray(res.lot())
     un0 = res.data["un_0"].values  # shape (nt, n_los)
@@ -114,8 +137,8 @@ def run() -> None:
     plt.show()
 
 
-# if __name__ == "__main__":
-#     run()
+if __name__ == "__main__":
+    run()
 
 
 
@@ -183,14 +206,14 @@ def comparative_study():
     # No spacer
     print("Simulation: no spacer...")
     t, r0_none, r1_none = run_simulation(mode="None")
-    plt.plot(t, r0_none, color='grey', linestyle=':', linewidth=2, label="Cable 0 (No spacer)")
+    #plt.plot(t, r0_none, color='grey', linestyle=':', linewidth=2, label="Cable 0 (No spacer)")
     plt.plot(t, r1_none, color='black', linestyle='--', linewidth=2, label="Cable 1 (No spacer)")
     
     # 1D spacer
     print("Simulation: 1D...")
     t, r0_1d, r1_1d = run_simulation(mode="1D")
-    plt.plot(t, r0_1d, color='blue', linestyle='--', alpha=0.7, label="Cable 0 (1D)")
-    plt.plot(t, r1_1d, color='blue', linestyle='-', alpha=0.7, label="Cable 1 (1D)")
+    #plt.plot(t, r0_1d, color='blue', linestyle='--', alpha=0.7, label="Cable 0 (1D)")
+    #plt.plot(t, r1_1d, color='blue', linestyle='-', alpha=0.7, label="Cable 1 (1D)")
     
     # 2D spacer
     widths_to_test = [0.01, 0.05, 0.20] # 1cm, 5cm, 20cm
@@ -214,8 +237,8 @@ def comparative_study():
     plt.tight_layout()
     plt.show()
 
-if __name__ == "__main__":
-    comparative_study()
+# if __name__ == "__main__":
+#     comparative_study()
 
 
 
@@ -357,12 +380,13 @@ def run_convergence_sim(mode, ns, tf=1.0, dt=5.0e-4, fixed_width=0.1):
     bump[-1] = 0.0
     ic = InitialConditions(un=[bump, np.zeros(ns)])
     
-    res = bundle.solve(is_uniform=is_uniform, parameters=params, force=None, zt=0.0, initial_conditions=ic)
+    res, ds = bundle.solve(is_uniform=is_uniform, parameters=params, force=None, zt=0.0, initial_conditions=ic)
 
     # Cable 1 last time step
     un1_interior = res.data["un_1"].values[-1, :]
     un1_full = np.concatenate(([0.0], un1_interior, [0.0]))
-    return un1_full
+
+    return un1_full, ds
 
 
 def order_of_convergence_study():
@@ -372,27 +396,31 @@ def order_of_convergence_study():
 
     # Reference solution
     print(f"Calcul des références (ns={ns_ref})...")
-    u_ref_1d = run_convergence_sim("1D", ns_ref)
-    u_ref_2d = run_convergence_sim("2D", ns_ref, fixed_width=0.1)
+    u_ref_1d, _ = run_convergence_sim("1D", ns_ref)
+    u_ref_2d, ds_ref = run_convergence_sim("2D", ns_ref, fixed_width=10)
     
     err_1d, err_2d, ds_values = [], [], []
     
     # Coarse meshes
     for ns in ns_list:
         print(f"Calcul pour ns={ns}...")
-        u_coarse_1d = run_convergence_sim("1D", ns)
-        u_coarse_2d = run_convergence_sim("2D", ns, fixed_width=0.1)
+        u_coarse_1d, _ = run_convergence_sim("1D", ns)
+        u_coarse_2d, ds_coarse = run_convergence_sim("2D", ns, fixed_width=10)
         
         ds = L / (ns - 1)
         ds_values.append(ds)
         step = (ns_ref - 1) // (ns - 1)
         
         u_ref_1d_down = u_ref_1d[::step]
-        u_ref_2d_down = u_ref_2d[::step]
-        
+        x_coarse_2d = np.concatenate(([0.0], np.cumsum(ds_coarse)))
+        x_ref_2d = np.concatenate(([0.0], np.cumsum(ds_ref)))
+
+        # Interpolation propre sur les vraies coordonnées
+        u_ref_2d_interp = np.interp(x_coarse_2d, x_ref_2d, u_ref_2d)
+                
         # Error norm L2
         err_1d.append(np.sqrt(np.mean((u_coarse_1d - u_ref_1d_down)**2)))
-        err_2d.append(np.sqrt(np.mean((u_coarse_2d - u_ref_2d_down)**2)))
+        err_2d.append(np.sqrt(np.mean((u_coarse_2d - u_ref_2d_interp)**2)))
         
     pente_1d, intercept_1d = np.polyfit(np.log(ds_values), np.log(err_1d), 1)
     pente_2d, intercept_2d = np.polyfit(np.log(ds_values), np.log(err_2d), 1)
