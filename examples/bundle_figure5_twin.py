@@ -28,7 +28,7 @@ def _aster570():
         mass=1.57,
         diameter=0.031,
         EA=3.76e07,
-        length=200.0,
+        length=20.0,
         tension=3.7e04,
         h=0.0,
     )
@@ -43,6 +43,9 @@ def _cable_comp():
         h=0.0,
     )
 
+
+
+
 #########
 # EXEMPLE TWIN BUNDLE
 #########
@@ -55,7 +58,7 @@ def run() -> None:
                              is_2d = True, delta_n=0.0, delta_b=0.0, j_b=200, j_t=200, width=0.050, l0 = 0.4)],
     )
 
-    ns = 81
+    ns = 321
     is_uniform = False
     s = np.linspace(0.0, 1.0, ns)
     ds = np.diff(s)
@@ -197,8 +200,8 @@ def run_simulation(mode="1D", width=0.035):
     )
 
     s_centre = 0.30
-    sigma = 0.005
-    bump = 0.001 * np.exp(-((np.concatenate((np.array([0.0]), np.cumsum(ds))) - s_centre) ** 2) / (2.0 * sigma**2))
+    sigma = 0.05
+    bump = 0.01 * np.exp(-((np.concatenate((np.array([0.0]), np.cumsum(ds))) - s_centre) ** 2) / (2.0 * sigma**2))
     bump[0] = 0.0
     bump[-1] = 0.0
     
@@ -228,7 +231,7 @@ def comparative_study():
     print("Simulation: 1D...")
     t, r0_1d, r1_1d = run_simulation(mode="1D")
     #plt.plot(t, r0_1d, color='blue', linestyle='--', alpha=0.7, label="Cable 0 (1D)")
-    #plt.plot(t, r1_1d, color='blue', linestyle='-', alpha=0.7, label="Cable 1 (1D)")
+    plt.plot(t, r1_1d, color='blue', linestyle='-', alpha=0.7, label="Cable 1 (1D)")
     
     # 2D spacer
     widths_to_test = [0.01, 0.05, 0.20] # 1cm, 5cm, 20cm
@@ -238,7 +241,7 @@ def comparative_study():
         print(f"Simulation: 2D width = {w}m ...")
         t, r0_2d, r1_2d = run_simulation(mode="2D", width=w)
         # Cable 0
-        plt.plot(t, r0_2d, color=col, linestyle='--', alpha=0.7, label=f"Cable 0 (2D, width={w}m)")
+        #lt.plot(t, r0_2d, color=col, linestyle='--', alpha=0.7, label=f"Cable 0 (2D, width={w}m)")
         # Cable 1 
         plt.plot(t, r1_2d, color=col, linestyle='-', label=f"Cable 1 (2D, width={w}m)")
 
@@ -382,8 +385,8 @@ def spatial_convergence_study():
 
 
 
-# Maillage 1D uniforme et maillage 2D avec entretoise de largeur fixe
 
+#1D uniform mesh and 2D non-uniform mesh with fixed-width 2D spacer
 def run_convergence_sim(mode, ns, tf=1.0, dt=5.0e-4, fixed_width=0.05):
     """
     1D convergence study withe uniform mesh.

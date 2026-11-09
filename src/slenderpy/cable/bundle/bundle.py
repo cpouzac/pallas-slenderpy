@@ -23,12 +23,80 @@ from typing import Callable, List, Optional, Tuple
 import numpy as np
 import scipy.sparse
 import scipy.sparse.linalg
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 
 from slenderpy import _progress_bar as _spb
 from slenderpy import fd_utils as _fdm
 from slenderpy import simulation
 from slenderpy.cable.bundle.cable import Cable
 from slenderpy.cable.bundle.spacer import Spacer
+
+
+
+
+
+def plot_mesh_adaptation(ds_old: np.ndarray, ds_new: np.ndarray, x_center: float, w_nd: float, case_name: str):
+    """
+    Mesh verification: spacer geometry plot
+    """
+    nodes_old = np.concatenate(([0.0], np.cumsum(ds_old)))
+    nodes_new = np.concatenate(([0.0], np.cumsum(ds_new)))
+    
+    fig, ax = plt.subplots(figsize=(12, 3))
+    
+    # Nodes
+    ax.plot(nodes_old, np.ones_like(nodes_old), 'bo-', label='Maillage initial', alpha=0.5, clip_on=False)
+    ax.plot(nodes_new, np.zeros_like(nodes_new), 'ro-', label='Maillage modifié', alpha=0.8, clip_on=False)
+    
+    x_left = x_center - w_nd / 2.0
+    x_right = x_center + w_nd / 2.0
+    
+    # Spacer
+    rect_old = patches.Rectangle((x_left, 0.8), w_nd, 0.4, linewidth=1, edgecolor='g', facecolor='g', alpha=0.2, label='Entretoise (position cible)')
+    rect_new = patches.Rectangle((x_left, -0.2), w_nd, 0.4, linewidth=1, edgecolor='g', facecolor='g', alpha=0.2)
+    ax.add_patch(rect_old)
+    ax.add_patch(rect_new)
+    
+    ax.set_yticks([0, 1])
+    ax.set_yticklabels(['Nouveau ds\n(Adapté)', 'Ancien ds\n(Uniforme)'])
+    ax.set_xlabel("Position adimensionnée 's' le long du câble")
+    ax.set_title(f"Vérification du maillage : {case_name}")
+
+    # Neighbour nodes
+    left_nodes_old = nodes_old[nodes_old < x_left]
+    n_left_old = left_nodes_old[-1] if len(left_nodes_old) > 0 else 0.0
+    
+    left_nodes_new = nodes_new[nodes_new < x_left]
+    n_left_new = left_nodes_new[-1] if len(left_nodes_new) > 0 else 0.0
+ 
+    right_nodes_old = nodes_old[nodes_old > x_right]
+    n_right_old = right_nodes_old[0] if len(right_nodes_old) > 0 else 1.0
+    
+    right_nodes_new = nodes_new[nodes_new > x_right]
+    n_right_new = right_nodes_new[0] if len(right_nodes_new) > 0 else 1.0
+    
+
+    x_min_plot = min(n_left_old, n_left_new)
+    x_max_plot = max(n_right_old, n_right_new)
+    
+
+    span = x_max_plot - x_min_plot
+    if span <= 0: 
+        span = w_nd
+        
+    ax.set_xlim(max(0.0, x_min_plot - 0.05 * span), min(1.0, x_max_plot + 0.05 * span))
+    ax.set_ylim(-0.5, 1.5)
+    
+    ax.legend(loc='upper right', fontsize=8)
+    ax.grid(True, axis='x', linestyle='--', alpha=0.5)
+    
+    plt.tight_layout()
+    plt.show()
+
+
+
+
 
 _VARS = ("ut", "un", "ub", "ef")
 
@@ -360,6 +428,8 @@ class Bundle:
                     idx_left = (np.abs(coord_nodes - x_left)).argmin()
                     idx_right = (np.abs(coord_nodes - x_right)).argmin()
 
+                    ds_old_copy = ds.copy()
+
                     if idx_left != idx_right:
                         ds[idx_left] += x_left - coord_nodes[idx_left]
                         ds[idx_left + 1] = w_nd
@@ -372,7 +442,7 @@ class Bundle:
                             ns -= n_spacer
                             new_ds = ds[:ns-1]
 
-
+                        plot_mesh_adaptation(ds_old_copy, new_ds, x_center, w_nd, "Réutilisation de noeuds (idx_left != idx_right)")
 
                     else: # Adding a node
                         new_ds = np.zeros(ns)
@@ -383,6 +453,7 @@ class Bundle:
                         new_ds[idx_left + 2] = coord_nodes[idx_right + 1] - x_right
                         new_ds[idx_left + 3:] = ds[idx_left+2:]
                     
+                        plot_mesh_adaptation(ds_old_copy, new_ds, x_center, w_nd, "Ajout d'un noeud (idx_left == idx_right)")
 
                     full_idx_left = idx_left + 1
                     full_idx_right = idx_left + 2
@@ -390,7 +461,7 @@ class Bundle:
                     print(f"Adaptation maillage : ")
                     print(f"Bords physiques visés : {x_left}m -> {x_right}m")
                     print(f"Indices du maillage   : {full_idx_left} -> {full_idx_right}")
-                    print(f"Nouvelle longueur câble : {np.sum(ds):.3f}m (Vérification)")
+                    print(f"Nouvelle longueur câble : {np.sum(ds) * L:.3f}m (Vérification)")
 
                 interior_idx_left = full_idx_left - 1
                 interior_idx_right = full_idx_right - 1
@@ -437,8 +508,7 @@ class Bundle:
             "interior_idx_right": interior_idx_right,
             "edges": edges_nd
         })
-
-
+        
         return data, new_ds, ns
 
     @staticmethod
