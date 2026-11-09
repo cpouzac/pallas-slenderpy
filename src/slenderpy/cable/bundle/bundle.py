@@ -327,6 +327,7 @@ class Bundle:
                 interior_idx_right = interior_idx
                 w_dim = spacer.width  
                 w_nd = w_dim / L
+            new_ds = ds
 
         # 2D SPACER
         else:
@@ -339,7 +340,9 @@ class Bundle:
                     full_idx_left = int(spacer.s * (ns - 1))
                     full_idx_right = full_idx_left + 1
                     
-                    full_idx = full_idx_left  
+                    full_idx = full_idx_left 
+                    ds_local = w_nd 
+                    new_ds = ds
                     
                 else:
                     # IRREGULAR MESH 
@@ -367,20 +370,18 @@ class Bundle:
                         if (idx_left + 1) != idx_right:
                             n_spacer = idx_right - (idx_left + 1)
                             ns -= n_spacer
-                            new_ds = ds[::ns-1]
+                            new_ds = ds[:ns-1]
+
 
 
                     else: # Adding a node
                         new_ds = np.zeros(ns)
                         ns += 1
-                        print("ds = ", ds)
                         new_ds[:idx_left] = ds[:idx_left]
-                        print("new_ds[::idx_left] ", new_ds[:idx_left])
                         new_ds[idx_left] = ds[idx_left] + x_left - coord_nodes[idx_left]
                         new_ds[idx_left + 1] = w_nd
                         new_ds[idx_left + 2] = coord_nodes[idx_right + 1] - x_right
                         new_ds[idx_left + 3:] = ds[idx_left+2:]
-                        print("new ds = ", new_ds)
                     
 
                     full_idx_left = idx_left + 1

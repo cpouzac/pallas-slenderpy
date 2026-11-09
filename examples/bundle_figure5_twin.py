@@ -43,7 +43,7 @@ def run() -> None:
     bundle = Bundle(
         cables=[cable, cable],
         spacers=[twin_spacer(s=0.5, k_n=5.0e4, c_n=200.0, k_b=5.0e4, c_b=200.0,
-                             is_2d = True, delta_n=0.0, delta_b=0.0, j_b=200, j_t=200, width=0.020, l0 = 0.4)],
+                             is_2d = True, delta_n=0.0, delta_b=0.0, j_b=200, j_t=200, width=0.050, l0 = 0.4)],
     )
 
     ns = 81
@@ -67,7 +67,7 @@ def run() -> None:
     # Spacer pre-processing: precompute interior-node index and non-dim
     # coefficients per edge.
     spacer_data, ds, ns = bundle._prepare_spacers(ds, L, m, g, tAd, is_uniform)
-
+    
     los = np.linspace(0.0, 1.0, ns)[1:-1].tolist()
 
     params = simulation.Parameters(
@@ -85,13 +85,12 @@ def run() -> None:
     s_grid = np.linspace(0.0, 1.0, ns)
     s_centre = 0.30
     sigma = 0.05
+    
     bump = 0.01 * np.exp(-((np.concatenate((np.array([0.0]), np.cumsum(ds))) - s_centre) ** 2) / (2.0 * sigma**2))
     # Force the boundary nodes to zero so the IC is compatible with the
     # Dirichlet boundary condition of the solver.
     bump[0] = 0.0
     bump[-1] = 0.0
-    print("len bump = ", len(bump))
-    print("ns = ", ns)
     ic = InitialConditions(un=[bump, np.zeros(ns)])
 
     res, _ = bundle.solve(is_uniform, spacer_data, ds, ns, params, force=None, zt=0.0, initial_conditions=ic)
@@ -137,8 +136,8 @@ def run() -> None:
     plt.show()
 
 
-if __name__ == "__main__":
-    run()
+# if __name__ == "__main__":
+#     run()
 
 
 
@@ -173,8 +172,27 @@ def run_simulation(mode="1D", width=0.035):
     bundle = Bundle(cables=[cable, cable], spacers=spacers)
 
     ns = 81
-    los = np.linspace(0.0, 1.0, ns)[1:-1].tolist()
+    s = np.linspace(0.0, 1.0, ns)
+    ds = np.diff(s)
+
+    # Per-cable non-dimensionalisation. All cables share L, m, g (enforced
+    # at construction), so tAd, uAd are identical; only vt2, vl2 vary if
+    # tensions or EA differ.
+    L = bundle.cables[0].length
+    m = bundle.cables[0].mass
+    g = bundle.cables[0].g
+    tAd = float(np.sqrt(L / g))
+    uAd = L / tAd
+    vt2 = np.array([cb.vt2 for cb in bundle.cables])
+    vl2 = np.array([cb.vl2 for cb in bundle.cables])
+
     is_uniform = False if mode == "2D" else True 
+
+    # Spacer pre-processing: precompute interior-node index and non-dim
+    # coefficients per edge.
+    spacer_data, ds, ns = bundle._prepare_spacers(ds, L, m, g, tAd, is_uniform)
+    
+    los = np.linspace(0.0, 1.0, ns)[1:-1].tolist()
 
     params = simulation.Parameters(
         ns=ns, t0=0.0, tf=6.0, dt=2.0e-3, dr=2.0e-2, los=los, pp=False,
@@ -182,13 +200,13 @@ def run_simulation(mode="1D", width=0.035):
 
     s_grid = np.linspace(0.0, 1.0, ns)
     s_centre = 0.30
-    sigma = 0.05
-    bump = 0.01 * np.exp(-((s_grid - s_centre) ** 2) / (2.0 * sigma**2))
+    sigma = 0.005
+    bump = 0.001 * np.exp(-((np.concatenate((np.array([0.0]), np.cumsum(ds))) - s_centre) ** 2) / (2.0 * sigma**2))
     bump[0] = 0.0
     bump[-1] = 0.0
     
     ic = InitialConditions(un=[bump, np.zeros(ns)])
-    res = bundle.solve(is_uniform, params, force=None, zt=0.0, initial_conditions=ic)
+    res, _ = bundle.solve(is_uniform, spacer_data, ds, ns, params, force=None, zt=0.0, initial_conditions=ic)
 
     t_axis = np.asarray(res.lot())
     un0 = res.data["un_0"].values
@@ -250,7 +268,7 @@ def comparative_study():
 #########
 
 # Uniform mesh, 2D spacer: width forced to width = ds
-def run_convergence_sim(ns, tf=1.0, dt=5.0e-4):
+def run_convergence_sim_uni(ns, tf=1.0, dt=5.0e-4):
     """
     Displacement, boundaries included, at t=tf.
     """
@@ -269,6 +287,26 @@ def run_convergence_sim(ns, tf=1.0, dt=5.0e-4):
         )],
     )
 
+    s = np.linspace(0.0, 1.0, ns)
+    ds = np.diff(s)
+
+    # Per-cable non-dimensionalisation. All cables share L, m, g (enforced
+    # at construction), so tAd, uAd are identical; only vt2, vl2 vary if
+    # tensions or EA differ.
+    L = bundle.cables[0].length
+    m = bundle.cables[0].mass
+    g = bundle.cables[0].g
+    tAd = float(np.sqrt(L / g))
+    uAd = L / tAd
+    vt2 = np.array([cb.vt2 for cb in bundle.cables])
+    vl2 = np.array([cb.vl2 for cb in bundle.cables])
+
+    is_uniform = True 
+
+    # Spacer pre-processing: precompute interior-node index and non-dim
+    # coefficients per edge.
+    spacer_data, ds, ns = bundle._prepare_spacers(ds, L, m, g, tAd, is_uniform)
+
     los = np.linspace(0.0, 1.0, ns)[1:-1].tolist()
     
     # Last time step
@@ -277,20 +315,22 @@ def run_convergence_sim(ns, tf=1.0, dt=5.0e-4):
     )
 
     s_grid = np.linspace(0.0, 1.0, ns)
-    bump = 0.01 * np.exp(-((s_grid - 0.30) ** 2) / (2.0 * 0.05**2))
+    s_centre = 0.30
+    sigma = 0.05
+    bump = 0.01 * np.exp(-((np.concatenate((np.array([0.0]), np.cumsum(ds))) - s_centre) ** 2) / (2.0 * sigma**2))
     bump[0] = 0.0
     bump[-1] = 0.0
     
     ic = InitialConditions(un=[bump, np.zeros(ns)])
     
-    res = bundle.solve(is_uniform=True, parameters=params, force=None, zt=0.0, initial_conditions=ic)
+    res, new_ds = bundle.solve(is_uniform, spacer_data, ds, ns, params, force=None, zt=0.0, initial_conditions=ic)
 
     # Cable 1
     un1_interior = res.data["un_1"].values[-1, :]
     
     # Full vector
     un1_full = np.concatenate(([0.0], un1_interior, [0.0]))
-    return un1_full
+    return un1_full, new_ds
 
 def spatial_convergence_study():
     ns_list = [41, 81, 161, 321]
@@ -298,14 +338,14 @@ def spatial_convergence_study():
     L = 200.0
     
     print(f"Calcul de la solution de référence (ns={ns_ref})...")
-    u_ref = run_convergence_sim(ns_ref)
+    u_ref, ds_ref = run_convergence_sim_uni(ns_ref)
     
     errors = []
     ds_values = []
     
     for ns in ns_list:
         print(f"Calcul pour ns={ns}...")
-        u_coarse = run_convergence_sim(ns)
+        u_coarse, ds_coarse  = run_convergence_sim_uni(ns)
         
         ds = L / (ns - 1)
         ds_values.append(ds)
@@ -350,7 +390,7 @@ def spatial_convergence_study():
 
 # Maillage 1D uniforme et maillage 2D avec entretoise de largeur fixe
 
-def run_convergence_sim(mode, ns, tf=1.0, dt=5.0e-4, fixed_width=0.1):
+def run_convergence_sim(mode, ns, tf=1.0, dt=5.0e-4, fixed_width=0.05):
     """
     1D convergence study withe uniform mesh.
     In 2D, the width is constant, forcing a non-uniform mesh.
@@ -368,6 +408,26 @@ def run_convergence_sim(mode, ns, tf=1.0, dt=5.0e-4, fixed_width=0.1):
         is_uniform = False
 
     bundle = Bundle(cables=[cable, cable], spacers=spacers)
+
+
+    s = np.linspace(0.0, 1.0, ns)
+    ds = np.diff(s)
+
+    # Per-cable non-dimensionalisation. All cables share L, m, g (enforced
+    # at construction), so tAd, uAd are identical; only vt2, vl2 vary if
+    # tensions or EA differ.
+    L = bundle.cables[0].length
+    m = bundle.cables[0].mass
+    g = bundle.cables[0].g
+    tAd = float(np.sqrt(L / g))
+    uAd = L / tAd
+    vt2 = np.array([cb.vt2 for cb in bundle.cables])
+    vl2 = np.array([cb.vl2 for cb in bundle.cables])
+
+    # Spacer pre-processing: precompute interior-node index and non-dim
+    # coefficients per edge.
+    spacer_data, ds, ns = bundle._prepare_spacers(ds, L, m, g, tAd, is_uniform)
+
     los = np.linspace(0.0, 1.0, ns)[1:-1].tolist()
     
     params = simulation.Parameters(
@@ -375,12 +435,14 @@ def run_convergence_sim(mode, ns, tf=1.0, dt=5.0e-4, fixed_width=0.1):
     )
 
     s_grid = np.linspace(0.0, 1.0, ns)
-    bump = 0.01 * np.exp(-((s_grid - 0.30) ** 2) / (2.0 * 0.05**2))
+    s_centre = 0.30
+    sigma = 0.05
+    bump = 0.01 * np.exp(-((np.concatenate((np.array([0.0]), np.cumsum(ds))) - s_centre) ** 2) / (2.0 * sigma**2))
     bump[0] = 0.0
     bump[-1] = 0.0
     ic = InitialConditions(un=[bump, np.zeros(ns)])
     
-    res, ds = bundle.solve(is_uniform=is_uniform, parameters=params, force=None, zt=0.0, initial_conditions=ic)
+    res, ds = bundle.solve(is_uniform, spacer_data, ds, ns, params, force=None, zt=0.0, initial_conditions=ic)
 
     # Cable 1 last time step
     un1_interior = res.data["un_1"].values[-1, :]
@@ -397,7 +459,7 @@ def order_of_convergence_study():
     # Reference solution
     print(f"Calcul des références (ns={ns_ref})...")
     u_ref_1d, _ = run_convergence_sim("1D", ns_ref)
-    u_ref_2d, ds_ref = run_convergence_sim("2D", ns_ref, fixed_width=10)
+    u_ref_2d, ds_ref = run_convergence_sim("2D", ns_ref)
     
     err_1d, err_2d, ds_values = [], [], []
     
@@ -405,7 +467,7 @@ def order_of_convergence_study():
     for ns in ns_list:
         print(f"Calcul pour ns={ns}...")
         u_coarse_1d, _ = run_convergence_sim("1D", ns)
-        u_coarse_2d, ds_coarse = run_convergence_sim("2D", ns, fixed_width=10)
+        u_coarse_2d, ds_coarse = run_convergence_sim("2D", ns)
         
         ds = L / (ns - 1)
         ds_values.append(ds)
@@ -451,5 +513,5 @@ def order_of_convergence_study():
     plt.tight_layout()
     plt.show()
 
-# if __name__ == "__main__":
-#     order_of_convergence_study()
+if __name__ == "__main__":
+    order_of_convergence_study()
