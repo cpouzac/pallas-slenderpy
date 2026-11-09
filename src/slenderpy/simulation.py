@@ -165,7 +165,7 @@ class Parameters:
     @staticmethod
     def _check_input(ns, t0, tf, dt, dr, los, pp):
         """Check input values and raise an exception if necessary."""
-        if not isinstance(ns, int):
+        if not isinstance(ns, (int, np.integer)):
             raise TypeError("input ns must be an int")
         if ns < 6:
             raise ValueError("input ns must be larger than 5")
