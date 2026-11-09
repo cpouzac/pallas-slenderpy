@@ -28,6 +28,8 @@ from typing import Callable, List, Sequence, Tuple, Union
 
 import numpy as np
 
+import slenderpy.force.wind
+
 # Wu 2018 fit coefficients (Annex A of the note, p. 35).
 _WU_CD_A = 1.2
 _WU_CD_a = 0.27
@@ -187,8 +189,6 @@ def diana_coefs(y_over_d: np.ndarray, z_over_d: np.ndarray) -> Tuple[np.ndarray,
                   np.where((eta < 3.66) & (xi >= 26.6), case2_l, 0.0))
 
     return cd, cl
-
-
 
 
 

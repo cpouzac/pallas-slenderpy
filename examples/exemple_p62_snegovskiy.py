@@ -18,9 +18,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from slenderpy import simulation
+from slenderpy.force.wind import ConstantWind
+from slenderpy.wake import aero_force_bundle
 from slenderpy.cable.bundle.bundle import Bundle, InitialConditions
 from slenderpy.cable.bundle.cable import Cable
-from slenderpy.cable.bundle.spacer import twin_spacer
+from slenderpy.cable.bundle.spacer import twin_spacer, Spacer, SpacerEdge
 
 
 def _cable_0():
@@ -40,7 +42,7 @@ def _cable_1():
         EA=2.9e07,
         length=240.0,
         tension=1.91e04,
-        h=-2.5*2.54e-2,
+        h=0.0,
     )
 
 
@@ -85,6 +87,8 @@ def run() -> None:
         spacers=[spacer0, spacer1],
     )
 
+    geometry = [(0.0, 0.0), (l0, -2.5*2.54e-2)]
+
     ns = 321
     is_uniform = False
     s = np.linspace(0.0, 1.0, ns)
@@ -107,66 +111,56 @@ def run() -> None:
     params = simulation.Parameters(
         ns=ns,
         t0=0.0,
-        tf=6.0,
-        dt=2.0e-3,
-        dr=2.0e-2,
+        tf=300.0,
+        dt=0.01,
+        dr=0.01,
         los=los,
         pp=False,
     )
 
-    # Gaussian bump on cable 0, centred at s = 0.30 * L, amplitude 1 cm,
-    # standard deviation 5 % of L. Zero on cable 1.
-    s_centre = 0.30
-    sigma = 0.05
-    bump = 0.01 * np.exp(-((np.concatenate((np.array([0.0]), np.cumsum(ds))) - s_centre) ** 2) / (2.0 * sigma**2))
-    # Force the boundary nodes to zero so the IC is compatible with the
-    # Dirichlet boundary condition of the solver.
-    bump[0] = 0.0
-    bump[-1] = 0.0
-    ic = InitialConditions(un=[bump, np.zeros(ns)])
+    my_wind = ConstantWind(speed=10.0)
 
-    res, _ = bundle.solve(is_uniform, spacer_data, ds, ns, params, force=None, zt=0.0, initial_conditions=ic)
+    force_callback = aero_force_bundle(
+    bundle_geometry = geometry, 
+    diameter=0.0254, 
+    wind=my_wind,         
+    aero_model="price",     
+    air_density=1.22
+)
+
+    ic = InitialConditions(un=[np.zeros(ns), np.zeros(ns)])
+
+    res, _ = bundle.solve(is_uniform, spacer_data, ds, ns, params, force=force_callback, zt=0.0, initial_conditions=ic)
 
     t_axis = np.asarray(res.lot())
-    un0 = res.data["un_0"].values  # shape (nt, n_los)
-    un1 = res.data["un_1"].values
+    
+    # Récupération du déplacement Y (binormal) pour le câble sous le vent (index 1)
+    # ou un selon ce que vous préférez tracer
+    y_leeward = res.data["ub_1"].values  # shape (nt, n_los)
 
-    rms0 = np.sqrt(np.mean(un0**2, axis=1))
-    rms1 = np.sqrt(np.mean(un1**2, axis=1))
+    # Création des indices des sous-portées (milieux)
+    los_arr = np.array(los)
+    subspan_targets = [1/6.0, 3/6.0, 5/6.0]  # milieux des 3 sous-portées de 80m
+    subspans = [np.abs(los_arr - target).argmin() for target in subspan_targets]
 
-    fig, (ax_map, ax_rms) = plt.subplots(1, 2, figsize=(12, 5))
-
-    s_phys = np.array(los) * cable.length
-    #extent = (s_phys[0], s_phys[-1], t_axis[-1], t_axis[0])
-    vmax = max(np.max(np.abs(un0)), np.max(np.abs(un1)))
-    ax_map.imshow(
-        np.concatenate([un0, un1], axis=1),
-        aspect="auto",
-        extent=(s_phys[0], 2.0 * s_phys[-1] - s_phys[0], t_axis[-1], t_axis[0]),
-        cmap="RdBu_r",
-        vmin=-vmax,
-        vmax=vmax,
-    )
-    ax_map.axvline(s_phys[-1], color="k", lw=1.2)
-    ax_map.set_xlabel("s [m]   (cable 0  |  cable 1)")
-    ax_map.set_ylabel("time [s]")
-    ax_map.set_title("normal displacement, cable 0 (left) | cable 1 (right)")
-
-    ax_rms.plot(t_axis, rms0 * 1e3, label="cable 0 (excited)", color="C0")
-    ax_rms.plot(t_axis, rms1 * 1e3, label="cable 1 (passive)", color="C1")
-    ax_rms.set_xlabel("time [s]")
-    ax_rms.set_ylabel("RMS normal displacement [mm]")
-    ax_rms.set_title("Energy transfer through the central spacer")
-    ax_rms.legend()
-    ax_rms.grid(True, alpha=0.3)
-
-    fig.suptitle(
-        "Twin bundle, mid-span spacer, Gaussian IC on cable 0 - "
-        "Figure 5 (left) of the note"
-    )
-    fig.tight_layout()
+    # Tracé direct style "autre code"
+    fig1 = plt.figure(figsize=[14, 8])
+    ax = fig1.add_subplot(111)
+    fig1.suptitle("Y-component motions in the leeward subconductors, middle of subspans 1 and 3", fontsize=12)
+    
+    colors = ['r', 'b', 'k']
+    for i in range(len(subspans)):
+        label = f"subspan {i+1}"
+        node_idx = subspans[i]
+        y_signal = y_leeward[:, node_idx]
+        ax.plot(t_axis, y_signal, "-", linewidth=1.5, color=colors[i], label=label)
+        
+    ax.set_xlabel("t [s]")
+    ax.set_ylabel("Y displacement [m]")
+    ax.grid(True)
+    ax.legend()
+    fig1.tight_layout()
     plt.show()
-
 
 if __name__ == "__main__":
     run()

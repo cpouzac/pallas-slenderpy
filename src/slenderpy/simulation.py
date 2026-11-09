@@ -94,8 +94,8 @@ class Parameters:
         ns: int = 11,
         t0: float = 0.0,
         tf: float = 1.0,
-        dt: float = 0.01,
-        dr: float = 0.01,
+        dt: float = 0.1,
+        dr: float = 0.1,
         los: list | int = 11,
         pp: bool | dict = False,
     ) -> None:

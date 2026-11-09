@@ -347,6 +347,7 @@ class Bundle:
                 vb[i, 1:-1] = vbb_i
 
             t += dt
+            print("t = ", t)
 
             if (k + 1) % parameters.rr == 0:
                 self._record(res, (k // parameters.rr) + 1, s, ds, C, vt2, un, ub)
@@ -441,6 +442,7 @@ class Bundle:
                             n_spacer = idx_right - (idx_left + 1)
                             ns -= n_spacer
                             new_ds = ds[:ns-1]
+                            ds = new_ds
 
                         plot_mesh_adaptation(ds_old_copy, new_ds, x_center, w_nd, "Réutilisation de noeuds (idx_left != idx_right)")
 
@@ -454,6 +456,8 @@ class Bundle:
                         new_ds[idx_left + 3:] = ds[idx_left+2:]
                     
                         plot_mesh_adaptation(ds_old_copy, new_ds, x_center, w_nd, "Ajout d'un noeud (idx_left == idx_right)")
+
+                        ds = new_ds
 
                     full_idx_left = idx_left + 1
                     full_idx_right = idx_left + 2
