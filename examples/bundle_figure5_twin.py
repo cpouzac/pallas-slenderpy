@@ -33,6 +33,15 @@ def _aster570():
         h=0.0,
     )
 
+def _cable_comp():
+    return Cable(
+        mass=1.57,
+        diameter=0.031,
+        EA=3.76e07,
+        length=10.0,
+        tension=3.7e04,
+        h=0.0,
+    )
 
 #########
 # EXEMPLE TWIN BUNDLE
@@ -48,21 +57,16 @@ def run() -> None:
 
     ns = 81
     is_uniform = False
-    # Space grid: uniform [0, 1] with ns nodes; ds is the (ns-1) vector
-    # of cell widths, n = ns-2 is the interior size.
     s = np.linspace(0.0, 1.0, ns)
     ds = np.diff(s)
 
     # Per-cable non-dimensionalisation. All cables share L, m, g (enforced
-    # at construction), so tAd, uAd are identical; only vt2, vl2 vary if
-    # tensions or EA differ.
+    # at construction), so tAd, uAd are identical
     L = bundle.cables[0].length
     m = bundle.cables[0].mass
     g = bundle.cables[0].g
     tAd = float(np.sqrt(L / g))
     uAd = L / tAd
-    vt2 = np.array([cb.vt2 for cb in bundle.cables])
-    vl2 = np.array([cb.vl2 for cb in bundle.cables])
 
     # Spacer pre-processing: precompute interior-node index and non-dim
     # coefficients per edge.
@@ -82,10 +86,8 @@ def run() -> None:
 
     # Gaussian bump on cable 0, centred at s = 0.30 * L, amplitude 1 cm,
     # standard deviation 5 % of L. Zero on cable 1.
-    s_grid = np.linspace(0.0, 1.0, ns)
     s_centre = 0.30
     sigma = 0.05
-    
     bump = 0.01 * np.exp(-((np.concatenate((np.array([0.0]), np.cumsum(ds))) - s_centre) ** 2) / (2.0 * sigma**2))
     # Force the boundary nodes to zero so the IC is compatible with the
     # Dirichlet boundary condition of the solver.
@@ -136,8 +138,8 @@ def run() -> None:
     plt.show()
 
 
-# if __name__ == "__main__":
-#     run()
+if __name__ == "__main__":
+    run()
 
 
 
@@ -156,8 +158,7 @@ def run_simulation(mode="1D", width=0.035):
     Simulation for a spacer model ('None', '1D', ou '2D')
 
     """
-    cable = _aster570()
-
+    cable = _cable_comp()
     if mode == "None":
         spacers = [twin_spacer(s=0.5, k_n=0.0, c_n=0.0, k_b=0.0, c_b=0.0,
                                is_2d=False, delta_n=0.0, delta_b=0.0)]
@@ -176,15 +177,12 @@ def run_simulation(mode="1D", width=0.035):
     ds = np.diff(s)
 
     # Per-cable non-dimensionalisation. All cables share L, m, g (enforced
-    # at construction), so tAd, uAd are identical; only vt2, vl2 vary if
-    # tensions or EA differ.
+    # at construction), so tAd, uAd are identical
     L = bundle.cables[0].length
     m = bundle.cables[0].mass
     g = bundle.cables[0].g
     tAd = float(np.sqrt(L / g))
     uAd = L / tAd
-    vt2 = np.array([cb.vt2 for cb in bundle.cables])
-    vl2 = np.array([cb.vl2 for cb in bundle.cables])
 
     is_uniform = False if mode == "2D" else True 
 
@@ -198,7 +196,6 @@ def run_simulation(mode="1D", width=0.035):
         ns=ns, t0=0.0, tf=6.0, dt=2.0e-3, dr=2.0e-2, los=los, pp=False,
     )
 
-    s_grid = np.linspace(0.0, 1.0, ns)
     s_centre = 0.30
     sigma = 0.005
     bump = 0.001 * np.exp(-((np.concatenate((np.array([0.0]), np.cumsum(ds))) - s_centre) ** 2) / (2.0 * sigma**2))
@@ -291,15 +288,13 @@ def run_convergence_sim_uni(ns, tf=1.0, dt=5.0e-4):
     ds = np.diff(s)
 
     # Per-cable non-dimensionalisation. All cables share L, m, g (enforced
-    # at construction), so tAd, uAd are identical; only vt2, vl2 vary if
+    # at construction), so tAd, uAd are identical
     # tensions or EA differ.
     L = bundle.cables[0].length
     m = bundle.cables[0].mass
     g = bundle.cables[0].g
     tAd = float(np.sqrt(L / g))
     uAd = L / tAd
-    vt2 = np.array([cb.vt2 for cb in bundle.cables])
-    vl2 = np.array([cb.vl2 for cb in bundle.cables])
 
     is_uniform = True 
 
@@ -314,7 +309,6 @@ def run_convergence_sim_uni(ns, tf=1.0, dt=5.0e-4):
         ns=ns, t0=0.0, tf=tf, dt=dt, dr=tf, los=los, pp=False,
     )
 
-    s_grid = np.linspace(0.0, 1.0, ns)
     s_centre = 0.30
     sigma = 0.05
     bump = 0.01 * np.exp(-((np.concatenate((np.array([0.0]), np.cumsum(ds))) - s_centre) ** 2) / (2.0 * sigma**2))
@@ -414,15 +408,12 @@ def run_convergence_sim(mode, ns, tf=1.0, dt=5.0e-4, fixed_width=0.05):
     ds = np.diff(s)
 
     # Per-cable non-dimensionalisation. All cables share L, m, g (enforced
-    # at construction), so tAd, uAd are identical; only vt2, vl2 vary if
-    # tensions or EA differ.
+    # at construction), so tAd, uAd are identical
     L = bundle.cables[0].length
     m = bundle.cables[0].mass
     g = bundle.cables[0].g
     tAd = float(np.sqrt(L / g))
     uAd = L / tAd
-    vt2 = np.array([cb.vt2 for cb in bundle.cables])
-    vl2 = np.array([cb.vl2 for cb in bundle.cables])
 
     # Spacer pre-processing: precompute interior-node index and non-dim
     # coefficients per edge.
@@ -434,7 +425,6 @@ def run_convergence_sim(mode, ns, tf=1.0, dt=5.0e-4, fixed_width=0.05):
         ns=ns, t0=0.0, tf=tf, dt=dt, dr=tf, los=los, pp=False,
     )
 
-    s_grid = np.linspace(0.0, 1.0, ns)
     s_centre = 0.30
     sigma = 0.05
     bump = 0.01 * np.exp(-((np.concatenate((np.array([0.0]), np.cumsum(ds))) - s_centre) ** 2) / (2.0 * sigma**2))
@@ -513,5 +503,5 @@ def order_of_convergence_study():
     plt.tight_layout()
     plt.show()
 
-if __name__ == "__main__":
-    order_of_convergence_study()
+# if __name__ == "__main__":
+#     order_of_convergence_study()
