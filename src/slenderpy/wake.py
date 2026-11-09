@@ -87,16 +87,123 @@ def wu2018_coefs(
     return cd, cl
 
 
+
+
+# Parameters from Annex A (page 150) of [Snegovskiy2010] to compute
+# leeward drag coefficient from cable position relative to windward cable.
+_b01 = 2.323294982163092e-1
+_b02 = 2.844681316572165e-2
+_b03 = -3.831362667418982e-4
+
+_b21 = 7.264297381642306e-1
+_b22 = -7.129965014332403e-2
+_b23 = 2.002378704380350e-3
+
+_b41 = -1.628227576498350e-1
+_b42 = 1.950084905957192e-2
+_b43 = -5.952414931982878e-4
+
+_b61 = 1.536080273957189e-2
+_b62 = -1.930079534172798e-3
+_b63 = 5.979023476687854e-5
+
+_b81 = -6.428424055644690e-4
+_b82 = 7.929895962013830e-5
+_b83 = -2.403369109975760e-6
+
+_b101 = 9.761759132226317e-6
+_b102 = -1.116095087816932e-6
+_b103 = 3.173009934540457e-8
+
+# Parameters from Annex A (page 151) of [Snegovskiy2010] to compute
+# leeward lift coefficient from cable position relative to windward cable.
+_q11 = -9.366116523539152e-1
+_q12 = 9.453571110216909e-2
+_q13 = -2.571093910023341e-3
+
+_q31 = 3.622073725080496e-1
+_q32 = -4.049373525837849e-2
+_q33 = 1.147815561818735e-3
+
+_q51 = -4.904551885931337e-2
+_q52 = 5.781434477530589e-3
+_q53 = -1.684462803797870e-4
+
+_q71 = 2.815451239687794e-3
+_q72 = -3.411751082960935e-4
+_q73 = 1.009254549253525e-5
+
+_q91 = -5.853126807000320e-5
+_q92 = 7.187070581552582e-6
+_q93 = -2.140673043868416e-7
+
+
+
+
+def price_coefs(y_over_d: np.ndarray, z_over_d: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """Drag and lift coefficients based on Price (1975)"""
+    y, z = y_over_d, z_over_d
+    
+    # Drag
+    a0 = _b01 + _b02 * y + _b03 * (y**2)
+    a2 = _b21 + _b22 * y + _b23 * (y**2)
+    a4 = _b41 + _b42 * y + _b43 * (y**2)
+    a6 = _b61 + _b62 * y + _b63 * (y**2)
+    a8 = _b81 + _b82 * y + _b83 * (y**2)
+    a10 = _b101 + _b102 * y + _b103 * (y**2)
+    cd = a10 * (z**10) + a8 * (z**8) + a6 * (z**6) + a4 * (z**4) + a2 * (z**2) + a0
+    cd = np.where(np.abs(z) > 4, 1.2, cd)
+
+    # Lift
+    a1 = _q11 + _q12 * y + _q13 * (y**2)
+    a3 = _q31 + _q32 * y + _q33 * (y**2)
+    a5 = _q51 + _q52 * y + _q53 * (y**2)
+    a7 = _q71 + _q72 * y + _q73 * (y**2)
+    a9 = _q91 + _q92 * y + _q93 * (y**2)
+    cl = a1 * z + a3 * (z**3) + a5 * (z**5) + a7 * (z**7) + a9 * (z**9)
+    cl = np.where(np.abs(z) > 4, 0.0, cl)
+
+    return cd, cl
+
+
+
+
+def diana_coefs(y_over_d: np.ndarray, z_over_d: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """Drag and lift coefficients based on Diana (1972)"""
+    xi, eta = y_over_d, np.abs(z_over_d)
+    
+    # Drag
+    case1_d = (1.2 - 1.605e-2 * (1.215 - 7.2e-2 * xi + 1.44e-3 * xi**2) * 
+               (74 - 0.712 * eta**2 - 10.5 * eta**3 + 2.66 * eta**4))
+    case2_d = (1.2 - 0.5056e-2 * (74 - 0.712 * eta**2 - 10.5 * eta**3 + 2.66 * eta**4))
+    cd = np.where((eta < 3) & (np.abs(xi) < 25), case1_d, 
+                  np.where((eta < 3) & (np.abs(xi) >= 25), case2_d, 1.2))
+
+    # Lift
+    case1_l = ((-1.78 + 0.127 * xi - 2.38e-3 * (xi**2)) * 
+               (0.928 * (eta**2) - 0.827 * (eta**3) + 0.244 * (eta**4) - 0.0239 * (eta**5)) * np.sign(z_over_d))
+    case2_l = (-0.08 * (0.928 * (eta**2) - 0.827 * (eta**3) + 0.244 * (eta**4) - 0.0239 * (eta**5)) * np.sign(z_over_d))
+    cl = np.where((eta < 3.66) & (xi < 26.6), case1_l,
+                  np.where((eta < 3.66) & (xi >= 26.6), case2_l, 0.0))
+
+    return cd, cl
+
+
+
+
+
 def aero_force_bundle(
     bundle_geometry: Sequence[Tuple[float, float]],
     diameter: float,
-    wind_speed: Union[float, Callable[[np.ndarray, float], np.ndarray]],
-    wind_direction: float = 0.0,
+    wind: object,  # Objet vent issu de wind.py (ConstantWind, etc.)
+    aero_model: str = "Price",  # "Wu", "Price", ou "Diana" (cf bundleconductors)
     air_density: float = 1.225,
     cd_windward: float = 1.0,
     cl_windward: float = 0.0,
 ) -> Callable:
     """Build a force callback that applies wake-coupled aerodynamic load.
+
+    Mise à jour : intègration des objets de wind.py et les modèles de bundleconductors
 
     The returned callback has the signature expected by
     :meth:`slenderpy.cable.dynamic.bundle.Bundle.solve`. At each evaluation
@@ -178,12 +285,15 @@ def aero_force_bundle(
     if air_density <= 0.0:
         raise ValueError("air_density must be positive")
 
+
+    # Vérification du modèle choisi
+    aero_model = aero_model.lower()
+    if aero_model not in ["wu", "price", "diana"]:
+        raise ValueError(f"Modèle aérodynamique inconnu : {aero_model}. Choisissez 'Wu', 'Price' ou 'Diana'.")
+
     n_cables = geom.shape[0]
     offset_B = geom[:, 0]
     offset_N = geom[:, 1]
-
-    cos_d = float(np.cos(wind_direction))
-    sin_d = float(np.sin(wind_direction))
 
     def force(
         s: np.ndarray,
@@ -198,21 +308,21 @@ def aero_force_bundle(
                 f"bundle_geometry has {n_cables} cables but solver passed "
                 f"{len(un_list)} state lists"
             )
-        s_arr = np.asarray(s, dtype=float)
-        if callable(wind_speed):
-            w_mag = np.asarray(wind_speed(s_arr, t), dtype=float)
-            if w_mag.shape != s_arr.shape:
-                raise ValueError(
-                    "callable wind_speed must return an array shaped like s"
-                )
-        else:
-            w_mag = np.full_like(s_arr, float(wind_speed))
 
-        wN = w_mag * sin_d
-        wB = w_mag * cos_d
+        s_arr = np.asarray(s, dtype=float)
+
+        # On interroge l'objet wind (issu de wind.py) pour obtenir la vitesse à l'instant t
+        # wy = vent longitudinal (qui correspond à l'axe Binormal horizontal du câble)
+        # wz = vent vertical (qui correspond à l'axe Normal vertical du câble)
+        wy, wz = wind.velocity(s_arr, t)
+        
+        # Si le vent renvoie des scalaires (ex: ConstantWind), on les convertit en tableaux
+        wB = np.asarray(wy, dtype=float) * np.ones_like(s_arr)
+        wN = np.asarray(wz, dtype=float) * np.ones_like(s_arr)
+        
         w_norm = np.hypot(wN, wB)
         valid_w = w_norm > 1e-12
-        # Safe denominator for divisions.
+
         w_norm_safe = np.where(valid_w, w_norm, 1.0)
 
         fn_list = [np.zeros_like(s_arr) for _ in range(n_cables)]
@@ -240,12 +350,15 @@ def aero_force_bundle(
                 z_rel = (-dN * wB + dB * wN) / w_norm_safe
                 yd = y_rel / diameter
                 zd = z_rel / diameter
+                
+                # On élargit la zone de détection pour englober les limites de Wu, Price et Diana
                 in_wake = (
                     valid_w
-                    & (yd >= _WU_Y_MIN)
-                    & (yd <= _WU_Y_MAX)
-                    & (np.abs(zd) <= _WU_Z_MAX)
+                    & (yd > 0.0)
+                    & (yd <= 30.0)
+                    & (np.abs(zd) <= 6.0)
                 )
+                
                 closer = in_wake & (y_rel < y_rel_min[i, :])
                 upstream_idx[i, closer] = j
                 y_rel_min[i, closer] = y_rel[closer]
@@ -264,7 +377,14 @@ def aero_force_bundle(
             if np.any(mask):
                 yd_wake = y_rel_min[i, mask] / diameter
                 zd_wake = z_rel_eff[i, mask] / diameter
-                cd_wake, cl_wake = wu2018_coefs(yd_wake, zd_wake)
+                
+                if aero_model == "wu":
+                    cd_wake, cl_wake = wu2018_coefs(yd_wake, zd_wake)
+                elif aero_model == "price":
+                    cd_wake, cl_wake = price_coefs(yd_wake, zd_wake)
+                elif aero_model == "diana":
+                    cd_wake, cl_wake = diana_coefs(yd_wake, zd_wake)
+                
                 cd[mask] = cd_wake
                 cl[mask] = cl_wake
 
