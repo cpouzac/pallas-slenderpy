@@ -347,7 +347,7 @@ class Bundle:
                 vb[i, 1:-1] = vbb_i
 
             t += dt
-            print("t = ", t)
+   
 
             if (k + 1) % parameters.rr == 0:
                 self._record(res, (k // parameters.rr) + 1, s, ds, C, vt2, un, ub)
@@ -396,7 +396,42 @@ class Bundle:
                 interior_idx_right = interior_idx
                 w_dim = spacer.width  
                 w_nd = w_dim / L
+
+                edges_nd = []
+                for e in spacer.edges:
+                    K_nd_n = e.k_n / (4 * m * g * ds_dim) * L
+                    C_nd_n = e.c_n / (4 * m * g * ds_dim * tAd) * L
+                    K_nd_b = e.k_b / (4 * m * g * ds_dim) * L
+                    C_nd_b = e.c_b / (4 * m * g * ds_dim * tAd) * L
+                    J_b_nd = (e.j_b * ds_local / (e.l0**3)) * (L / (m * g))
+                    print("jb = ", e.j_b)
+                    print("J_b_nd = ", J_b_nd)
+                    J_t_nd = (e.j_t * ds_local / (e.l0**3)) * (L / (m * g))
+                    
+                    edges_nd.append(
+                        {
+                            "i": e.i,
+                            "j": e.j,
+                            "K_nd_n": K_nd_n,
+                            "C_nd_n": C_nd_n,
+                            "K_nd_b": K_nd_b,
+                            "C_nd_b": C_nd_b,
+                            "delta_n": e.delta_n / L,
+                            "delta_b": e.delta_b / L,
+                            "J_b_nd": J_b_nd,
+                            "J_t_nd": J_t_nd,
+                            "width_nd": w_nd,
+                        }
+                    )
+                
+                data.append({
+                    "interior_idx_left": interior_idx_left,
+                    "interior_idx_right": interior_idx_right,
+                    "edges": edges_nd
+                })
+                
             new_ds = ds
+
 
         # 2D SPACER
         else:
@@ -478,41 +513,39 @@ class Bundle:
                 
                 ds_dim = w_nd * L
                 
-
-
-        edges_nd = []
-        for e in spacer.edges:
-            K_nd_n = e.k_n / (4 * m * g * ds_dim) * L
-            C_nd_n = e.c_n / (4 * m * g * ds_dim * tAd) * L
-            K_nd_b = e.k_b / (4 * m * g * ds_dim) * L
-            C_nd_b = e.c_b / (4 * m * g * ds_dim * tAd) * L
-            J_b_nd = (e.j_b * ds_local / (e.l0**3)) * (L / (m * g))
-            print("jb = ", e.j_b)
-            print("J_b_nd = ", J_b_nd)
-            J_t_nd = (e.j_t * ds_local / (e.l0**3)) * (L / (m * g))
+                edges_nd = []
+                for e in spacer.edges:
+                    K_nd_n = e.k_n / (4 * m * g * ds_dim) * L
+                    C_nd_n = e.c_n / (4 * m * g * ds_dim * tAd) * L
+                    K_nd_b = e.k_b / (4 * m * g * ds_dim) * L
+                    C_nd_b = e.c_b / (4 * m * g * ds_dim * tAd) * L
+                    J_b_nd = (e.j_b * ds_local / (e.l0**3)) * (L / (m * g))
+                    print("jb = ", e.j_b)
+                    print("J_b_nd = ", J_b_nd)
+                    J_t_nd = (e.j_t * ds_local / (e.l0**3)) * (L / (m * g))
+                    
+                    edges_nd.append(
+                        {
+                            "i": e.i,
+                            "j": e.j,
+                            "K_nd_n": K_nd_n,
+                            "C_nd_n": C_nd_n,
+                            "K_nd_b": K_nd_b,
+                            "C_nd_b": C_nd_b,
+                            "delta_n": e.delta_n / L,
+                            "delta_b": e.delta_b / L,
+                            "J_b_nd": J_b_nd,
+                            "J_t_nd": J_t_nd,
+                            "width_nd": w_nd,
+                        }
+                    )
             
-            edges_nd.append(
-                {
-                    "i": e.i,
-                    "j": e.j,
-                    "K_nd_n": K_nd_n,
-                    "C_nd_n": C_nd_n,
-                    "K_nd_b": K_nd_b,
-                    "C_nd_b": C_nd_b,
-                    "delta_n": e.delta_n / L,
-                    "delta_b": e.delta_b / L,
-                    "J_b_nd": J_b_nd,
-                    "J_t_nd": J_t_nd,
-                    "width_nd": w_nd,
-                }
-            )
-        
-        data.append({
-            "interior_idx_left": interior_idx_left,
-            "interior_idx_right": interior_idx_right,
-            "edges": edges_nd
-        })
-        
+                data.append({
+                    "interior_idx_left": interior_idx_left,
+                    "interior_idx_right": interior_idx_right,
+                    "edges": edges_nd
+                })
+            
         return data, new_ds, ns
 
     @staticmethod
