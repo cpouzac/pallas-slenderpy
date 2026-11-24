@@ -272,6 +272,13 @@ class Bundle:
 
         res.start_timer()
         pb = _spb.generate(parameters.pp, parameters.nt, desc=__name__)
+
+        n_out = len(parameters.time_vector_output())
+        FN = np.zeros((n_out, nc, ns))
+        FB = np.zeros((n_out, nc, ns))
+        mids = np.concatenate(([0.0], 0.5 * (ds[:-1] + ds[1:]), [0.0]))
+        to_newtons = (m * g * L) * (mids)
+
         for k in range(parameters.nt):
             # Per-cable strain integral and effective wave-speed b_i.
             e_vals = np.empty(nc)
@@ -347,10 +354,16 @@ class Bundle:
                 vb[i, 1:-1] = vbb_i
 
             t += dt
-   
+            # Force à t = t0 (utile si force non nulle dès t0, ex. vent ou cosinus)
+            if k == 0:
+                FN[0, :, :] = fn1 * to_newtons[None, :]
+                FB[0, :, :] = fb1 * to_newtons[None, :]
 
             if (k + 1) % parameters.rr == 0:
+                k_out = (k // parameters.rr) + 1
                 self._record(res, (k // parameters.rr) + 1, s, ds, C, vt2, un, ub)
+                FN[k_out, :, :] = fn2 * to_newtons[None, :]
+                FB[k_out, :, :] = fb2 * to_newtons[None, :]
                 pb.update(parameters.rr)
 
         pb.close()
@@ -365,7 +378,7 @@ class Bundle:
                 res.data[f"{v}_{i}"] *= L
             res.data[f"ef_{i}"] *= self.cables[i].EA
 
-        return res, ds
+        return res, ds, FN, FB
 
     def _prepare_spacers(
         self, ds: np.ndarray, L: float, m: float, g: float, tAd: float, is_uniform: bool
@@ -399,12 +412,12 @@ class Bundle:
 
                 edges_nd = []
                 for e in spacer.edges:
-                    K_nd_n = e.k_n / (4 * m * g * ds_dim) * L
-                    C_nd_n = e.c_n / (4 * m * g * ds_dim * tAd) * L
-                    K_nd_b = e.k_b / (4 * m * g * ds_dim) * L
-                    C_nd_b = e.c_b / (4 * m * g * ds_dim * tAd) * L
-                    J_b_nd = (e.j_b*ds_local/(e.l0**3))*(0)
-                    J_t_nd = (e.j_t*ds_local/(e.l0**3))*(0)
+                    K_nd_n = e.k_n / (4 * m * g * ds_local) 
+                    C_nd_n = e.c_n / (4 * m * g * ds_local * tAd) 
+                    K_nd_b = e.k_b / (4 * m * g * ds_local) 
+                    C_nd_b = e.c_b / (4 * m * g * ds_local * tAd) 
+                    J_b_nd = (e.j_b * ds_dim) / (m *g * L*e.l0**3 * w_dim * ds_local)
+                    J_t_nd = (e.j_t * ds_dim) / (m* g * L*e.l0**4 * ds_local)
                     
                     edges_nd.append(
                         {
@@ -513,12 +526,15 @@ class Bundle:
                 
                 edges_nd = []
                 for e in spacer.edges:
-                    K_nd_n = e.k_n / (4 * m * g * ds_dim) * L
-                    C_nd_n = e.c_n / (4 * m * g * ds_dim * tAd) * L
-                    K_nd_b = e.k_b / (4 * m * g * ds_dim) * L
-                    C_nd_b = e.c_b / (4 * m * g * ds_dim * tAd) * L
-                    J_b_nd = (e.j_b * ds_dim / (e.l0**3))
-                    J_t_nd = (e.j_t * ds_dim / (e.l0**3)) 
+                    K_nd_n = e.k_n / (4 * m * g * ds_local) 
+                    C_nd_n = e.c_n / (4 * m * g * ds_local * tAd)
+                    K_nd_b = e.k_b / (4 * m * g * ds_local) 
+                    C_nd_b = e.c_b / (4 * m * g * ds_local * tAd)
+                    J_b_nd = (e.j_b * ds_dim) / (m *g * L *e.l0**3 * w_dim * ds_local)
+                    J_t_nd = (e.j_t * ds_dim) / (m* g * L*e.l0**4 * ds_local)
+                    print("Kn = ", K_nd_b )
+                    print("Jb =  ", J_b_nd)
+                    print("Jt =  ", J_t_nd)
                     
                     edges_nd.append(
                         {
@@ -597,7 +613,7 @@ def _zero_bundle_force(
 
 
 def _eval_force(
-    force: Callable,
+    force_tuple: Tuple[Callable, ...],
     s: np.ndarray,
     t: float,
     dt: float,
@@ -623,8 +639,15 @@ def _eval_force(
     vb_list = [vb[i, :] * uAd for i in range(nc)]
     t_dim = t * tAd
     tp_dim = (t + dt) * tAd
-    fn1, fb1 = force(s, t_dim, un_list, ub_list, vn_list, vb_list)
-    fn2, fb2 = force(s, tp_dim, un_list, ub_list, vn_list, vb_list)
+    fn1, fb1 = np.zeros((nc, un.shape[1])), np.zeros((nc, ub.shape[1]))
+    fn2, fb2 = np.zeros((nc, un.shape[1])), np.zeros((nc, ub.shape[1]))
+    for force in force_tuple:
+        dfn, dfb = force(s, t_dim, un_list, ub_list, vn_list, vb_list)
+        fn1 += dfn
+        fb1 += dfb
+        dfn2, dfb2 = force(s, tp_dim, un_list, ub_list, vn_list, vb_list)
+        fn2 += dfn2
+        fb2 += dfb2
     scale = 1.0 / (m * g)
     fn1_arr = np.stack([np.asarray(x, dtype=float) * scale for x in fn1])
     fn2_arr = np.stack([np.asarray(x, dtype=float) * scale for x in fn2])

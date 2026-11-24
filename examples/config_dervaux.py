@@ -3,10 +3,12 @@ import numpy as np
 from scipy import signal
 
 from slenderpy import simulation
+from slenderpy.force.wind import ConstantWind
+from slenderpy.wake import aero_force_bundle
 from slenderpy.cable.bundle.bundle import Bundle, InitialConditions
 from slenderpy.cable.bundle.cable import Cable
 from slenderpy.cable.bundle.spacer import twin_spacer, Spacer, SpacerEdge
-from slenderpy.force_bundle import Excitation
+from slenderpy.legacy.force import Excitation_bundle
 
 
 def _aster570():
@@ -29,7 +31,7 @@ def run() -> None:
     cable = _aster570()
     bundle = Bundle(
         cables=[cable, cable],
-        spacers=[twin_spacer(s=0.5, k_n=5.0e4, c_n=200.0, k_b=5.0e4, c_b=200.0,
+        spacers=[twin_spacer(s=1./2, k_n=5.0e4, c_n=200.0, k_b=5.0e4, c_b=200.0,
                              is_2d = True, delta_n=0.0, delta_b=0.0, j_b=200, j_t=200, width=0.0325, l0 = 0.4)],
     )
 
@@ -60,7 +62,7 @@ def run() -> None:
 
     ic = InitialConditions(un=[np.zeros(ns), np.zeros(ns)])
 
-    force_motor = Excitation(f = 5.0,
+    force_motor = Excitation_bundle(f = 5.0,
         a = 2.0,
         s = 1./L,
         nc = 2,
@@ -69,14 +71,29 @@ def run() -> None:
         L = L,
         t0 = 0.0,
         tf = 35.0,
-        gravity = True,
+        gravity = False,
         g= 9.81)
 
-    res, _ = bundle.solve(is_uniform, spacer_data, ds, ns, params, force=force_motor, zt=0.0, initial_conditions=ic)
+    geometry = [(0.0, 0.0), (0.4, 0.0)]
+
+    my_wind = ConstantWind(speed=0.0)
+
+    force_callback = aero_force_bundle(
+    bundle_geometry = geometry, 
+    diameter=0.0254, 
+    wind=my_wind,         
+    aero_model="price",     
+    air_density=1.204
+)
+
+
+    res, _, FN, FB = bundle.solve(is_uniform, spacer_data, ds, ns, params, force=(force_motor, force_callback), zt=0.0, initial_conditions=ic)
 
     t_axis = np.asarray(res.lot())
     los_arr = np.asarray(res.los())
     s_grid = np.concatenate(([0.0], np.cumsum(ds)))
+
+    t_full = np.arange(params.nt)*params.dt
 
     un0 = res.data["un_0"].values 
     un1 = res.data["un_1"].values
@@ -87,14 +104,8 @@ def run() -> None:
     positions = ["motor position", "midspan"]
 
     zeros_state = [np.zeros_like(s_grid), np.zeros_like(s_grid)]
-    fn0_hist = np.zeros((len(t_axis), len(s_grid)))
-    fn1_hist = np.zeros((len(t_axis), len(s_grid)))
-    for k, tk in enumerate(t_axis):
-        fn_list, _ = force_motor(
-            s_grid, float(tk), zeros_state, zeros_state, zeros_state, zeros_state
-        )
-        fn0_hist[k, :] = fn_list[0]
-        fn1_hist[k, :] = fn_list[1]
+  
+    
 
     for s_pos, pos in zip(target_s, positions):
 
@@ -102,11 +113,11 @@ def run() -> None:
         z1 = un0[:, i_los]
         z2 = un1[:, i_los]
 
-        i_grid = int(np.argmin(np.abs(s_grid[1:-1] - s_pos))) + 1
-        cell_len = 0.5 * (s_grid[i_grid + 1] - s_grid[i_grid - 1]) * float(cable.length)
-        force1 = fn0_hist[:, i_grid] * cell_len
-        force2 = fn1_hist[:, i_grid] * cell_len
 
+        i_grid = int(np.argmin(np.abs(s_grid[1:-1] - s_pos))) + 1
+        force1 = FN[:, 0, i_grid]
+        force2 = FN[:, 1, i_grid]
+      
         fig = plt.figure(figsize=(10, 8))
 
         ax = fig.add_subplot(211)
@@ -121,7 +132,7 @@ def run() -> None:
         ax.plot(t_axis, force1, label=f"Normal force at {pos} (cable 1)")
         ax.plot(t_axis, force2, label=f"Normal force at {pos} (cable 2)")
         ax.set_xlabel("Time [s]")
-        ax.set_ylabel("Force [N]")
+        ax.set_ylabel("Force [N/m]")
         ax.grid(True, alpha=0.3)
         ax.legend()
 
