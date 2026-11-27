@@ -13,7 +13,6 @@ from slenderpy.cable.static.nleq import length as n_length
 from slenderpy.cable.static.parabolic import length as p_length
 from slenderpy.cable.static.parabolic import max_chord
 
-
 class FrequencyMethod(str, Enum):
     """Length model used in the taut-string natural-frequency formula."""
 

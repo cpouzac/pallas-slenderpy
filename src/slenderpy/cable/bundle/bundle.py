@@ -292,8 +292,7 @@ class Bundle:
 
             # User force, evaluated at current state at both t and t+dt.
             fn1, fn2, fb1, fb2 = _eval_force(
-                force, s, t, dt, un, ub, vn, vb, tAd, L, uAd, m, g
-            )
+                force, s, t, dt, un, ub, vn, vb, tAd, L, uAd, m, g)
 
             Rvn = np.empty((nc, n))
             Rvb = np.empty((nc, n))

@@ -30,7 +30,7 @@ def _cable_0():
         mass=1.25,
         diameter=2.54e-2,
         EA=2.9e07,
-        length=240.0,
+        spanlength=240.0,
         tension=1.9e04,
         h=0.0,
     )
@@ -40,7 +40,7 @@ def _cable_1():
         mass=1.25,
         diameter=2.54e-2,
         EA=2.9e07,
-        length=240.0,
+        spanlength=240.0,
         tension=1.91e04,
         h=0.0,
     )
@@ -55,9 +55,9 @@ def run() -> None:
     cable0 = _cable_0()
     cable1 = _cable_1()
 
-    k_n = 1e6
+    k_n = 1e4
     c_n = 200.0
-    k_b = 1e6
+    k_b = 1e4
     c_b = 200.0
     is_2d = True
     delta_n = 0.0
@@ -129,7 +129,7 @@ def run() -> None:
     
     res_relax, _ = bundle.solve(
         is_uniform, spacer_data, ds, ns, params_relax, 
-        force=force_callback, zt=2.0, initial_conditions=None
+        force=(force_callbac,), zt=2.0, initial_conditions=None
     )
     
 
@@ -146,15 +146,15 @@ def run() -> None:
     # # =======================================================
     params_wio = simulation.Parameters(
         ns=ns, t0=20.0, tf=300.0, 
-        dt=0.002,  # <-- CLÉ N°2 : on réduit dt pour stabiliser les micro-segments du maillage
-        dr=0.02,   # On augmente un peu l'intervalle de sauvegarde pour compenser dt
+        dt=0.002, 
+        dr=0.02, 
         los=s_adapted[1:-1].tolist(), # Ici on peut reprendre votre los tronqué classique
         pp=True
     )
 
     res, _ = bundle.solve(
         is_uniform, spacer_data, ds, ns, params_wio, 
-        force=force_callback, zt=0.0, initial_conditions=ic_eq
+        force=(force_callback,), zt=0.0, initial_conditions=ic_eq
     )
 
 
@@ -216,8 +216,6 @@ def run() -> None:
     ax.legend()
     fig1.tight_layout()
     
-    # --- SAUVEGARDE DE LA FIGURE ---
-    # Vous pouvez changer l'extension (.png, .pdf, .svg, etc.) et le dossier de destination
     fig1.savefig("mouvements_sous_portees_asym.png", dpi=300, bbox_inches='tight')
     
     plt.show()

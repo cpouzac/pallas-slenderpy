@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 import time
+from scipy import signal
 from pathlib import Path
 from scipy.fft import fft, fftfreq
 from slenderpy import simulation
@@ -34,7 +35,7 @@ def _cable_0():
         mass=1.25,
         diameter=3.e-2,
         EA=2.9e07,
-        length=45.0,
+        spanlength=45.0,
         tension=1.58e04,
         h=0.0,
     )
@@ -44,7 +45,7 @@ def _cable_1():
         mass=1.25,
         diameter=3.e-2,
         EA=2.9e07,
-        length=45.0,
+        spanlength=45.0,
         tension=1.58e04,
         h=0.0,
     )
@@ -121,7 +122,7 @@ def run() -> None:
 
     ic = InitialConditions(un=[np.zeros(ns), np.zeros(ns)])
 
-    res, _ = bundle.solve(is_uniform, spacer_data, ds, ns, params, force=force_callback, zt=0.0, initial_conditions=ic)
+    res, _, _, _ = bundle.solve(is_uniform, spacer_data, ds, ns, params, force=(force_callback,), zt=0.0, initial_conditions=ic)
 
     filename = "Exemple_Snegovskiy_p58"
     save_dir = "./results"
@@ -187,11 +188,12 @@ def run() -> None:
             verticalalignment='bottom', bbox=props)
 
     fig1.tight_layout()
-    fig1.savefig(os.path.join(save_dir, f"{filename}_orbits.png"), dpi=300)
+    fig1.savefig(os.path.join(save_dir, f"{filename}_orbits.svg"), format="svg", bbox_inches="tight", dpi=300)
 
     # =========================================================
     # FIGURE 2 : Évolutions temporelles (Y, Z et profil de vent)
     # =========================================================
+
     fig2 = plt.figure(figsize=[14, 10])
     
     # Déplacement Y
@@ -221,17 +223,90 @@ def run() -> None:
     ax3.grid(True)
 
     fig2.tight_layout()
-    fig2.savefig(os.path.join(save_dir, f"{filename}_time_series.png"), dpi=300)
+    fig2.savefig(os.path.join(save_dir, f"{filename}_time_series.svg"), format="svg", bbox_inches="tight", dpi=300)
 
 
     # =========================================================
-    # FIGURE 3 : Analyse Spectrale (FFT) & Fréquences Théoriques
+    # FIGURE 3 : Analyse Spectrale (FFT)
     # =========================================================
     f_theorique_y = _op_frequencies(cable0.length, cable0.tension, cable0.h, cable0.mass, n=1)[0]
     f_theorique_z = _ip_frequencies(cable0.length, cable0.tension, cable0.h, cable0.mass, cable0.EA, n=1)[0]
 
     print(f"Théorie Y (Out-of-plane) : {f_theorique_y:.3f} Hz")
     print(f"Théorie Z (In-plane)     : {f_theorique_z:.3f} Hz")
+
+    dt_out = float(np.median(np.diff(t_axis)))
+    n_pts = len(t_axis)
+    freq = np.fft.rfftfreq(n_pts, d=dt_out)
+
+    # Normalisation pour obtenir l'amplitude crête approximative en mètres
+    scale_fft = 2.0 / n_pts
+
+    spectres = [
+        (
+            "Y (Out-of-plane)",
+            "Displacement Y [m]",
+            f_theorique_y,
+            np.abs(np.fft.rfft(y1 - np.mean(y1))) * scale_fft,
+            np.abs(np.fft.rfft(y2 - np.mean(y2))) * scale_fft,
+        ),
+        (
+            "Z (In-plane)",
+            "Displacement Z [m]",
+            f_theorique_z,
+            np.abs(np.fft.rfft(z1 - np.mean(z1))) * scale_fft,
+            np.abs(np.fft.rfft(z2 - np.mean(z2))) * scale_fft,
+        ),
+    ]
+
+    fig3, axes_fft = plt.subplots(2, 1, figsize=(12, 9), sharex=True)
+    fig3.suptitle(f"{filename} - FFT", fontsize=16)
+
+    for ax_fft, (comp_label, y_label, f_theo, spec1, spec2) in zip(axes_fft, spectres):
+        ax_fft.plot(freq, spec1, "r-", linewidth=1.0, label="cable 1 (windward)")
+        ax_fft.plot(freq, spec2, "b-", linewidth=1.0, label="cable 2 (leeward)")
+        ax_fft.axvline(
+            f_theo,
+            color="g",
+            linestyle="--",
+            linewidth=1.2,
+            label=f"Théorie mode 1 ({f_theo:.3f} Hz)",
+        )
+        ax_fft.set_ylabel(f"|FFT({comp_label})| [m]")
+        ax_fft.set_title(f"Spectre {y_label}")
+        ax_fft.grid(True, linestyle=":", alpha=0.7)
+        ax_fft.legend(loc="best")
+
+        print(f"\nPics dominants {comp_label} (théorie mode 1 = {f_theo:.3f} Hz) :")
+        for spec, color, cable_label in (
+            (spec1, "r", "cable 1"),
+            (spec2, "b", "cable 2"),
+        ):
+            peaks, _ = signal.find_peaks(spec)
+            if peaks.size > 0:
+                order = np.flip(np.argsort(spec[peaks]))[:5]
+                top_peaks = peaks[order]
+                peaks_str = ", ".join(
+                    f"{freq[p]:.3f} Hz (amp≈{spec[p]:.3e} m)" for p in top_peaks
+                )
+                print(f"  {cable_label} : {peaks_str}")
+
+                for p in top_peaks:
+                    ax_fft.annotate(
+                        f"{freq[p]:.2f} Hz",
+                        xy=(freq[p], spec[p]),
+                        xytext=(0, 4),
+                        textcoords="offset points",
+                        ha="center",
+                        fontsize=8,
+                        color=color,
+                    )
+            else:
+                print(f"  {cable_label} : aucun pic détecté")
+
+    axes_fft[-1].set_xlabel("Frequency [Hz]")
+    fig3.tight_layout()
+    fig3.savefig(os.path.join(save_dir, f"{filename}_fft.svg"), format="svg", bbox_inches="tight", dpi=300)
 
     plt.show()
 

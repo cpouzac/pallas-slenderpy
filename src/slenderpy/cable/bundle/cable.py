@@ -40,7 +40,7 @@ class Cable:
         provided by the user may depend on it.
     EA : float
         Axial stiffness (N).
-    length : float
+    spanlength : float
         Span length (m).
     tension : float
         Mechanical tension at the support (N).
@@ -55,7 +55,7 @@ class Cable:
         mass: float,
         diameter: float,
         EA: float,
-        length: float,
+        spanlength: float,
         tension: float,
         h: float = 0.0,
         g: float = _GRAVITY,
@@ -66,7 +66,7 @@ class Cable:
             raise ValueError("diameter must be positive")
         if EA <= 0.0:
             raise ValueError("EA must be positive")
-        if length <= 0.0:
+        if spanlength <= 0.0:
             raise ValueError("length must be positive")
         if tension <= 0.0:
             raise ValueError("tension must be positive")
@@ -76,10 +76,17 @@ class Cable:
         self.mass = mass
         self.diameter = diameter
         self.EA = EA
-        self.length = length
+        self.spanlength = spanlength
         self.tension = tension
         self.h = h
         self.g = g
+
+        self.length = catenary.length(
+                        lspan = spanlength,
+                        tension = tension,
+                        sld = h,
+                        linm = mass,
+                        g = g,)
 
     @property
     def tAd(self) -> float:

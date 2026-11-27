@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy import signal
-
+import os
 from slenderpy import simulation
 from slenderpy.force.wind import ConstantWind
 from slenderpy.wake import aero_force_bundle
@@ -9,6 +9,7 @@ from slenderpy.cable.bundle.bundle import Bundle, InitialConditions
 from slenderpy.cable.bundle.cable import Cable
 from slenderpy.cable.bundle.spacer import twin_spacer, Spacer, SpacerEdge
 from slenderpy.legacy.force import Excitation_bundle
+from slenderpy.cable.frequency import _ip_frequencies, _op_frequencies
 
 
 def _aster570():
@@ -16,7 +17,7 @@ def _aster570():
         mass=1.57,
         diameter=0.03105,
         EA=3.76e07,
-        length=40.0,
+        spanlength=40.0,
         tension=2.7795e04,
         h=2.09,
     )
@@ -70,7 +71,7 @@ def run() -> None:
         m = m,
         L = L,
         t0 = 0.0,
-        tf = 35.0,
+        tf = 2.0,
         gravity = False,
         g= 9.81)
 
@@ -99,7 +100,8 @@ def run() -> None:
     un1 = res.data["un_1"].values
 
     s_motor = 1./L 
-    s_sensor = 0.5                      
+    s_sensor = 0.5   
+    s_fatigue = 0.50263                   
     target_s = [s_motor, s_sensor]
     positions = ["motor position", "midspan"]
 
@@ -107,39 +109,43 @@ def run() -> None:
   
     
 
-    for s_pos, pos in zip(target_s, positions):
+    results_dir = "results"
+    os.makedirs(results_dir, exist_ok=True)
 
+    n_pos = len(positions)
+
+    fig_disp, axes_disp = plt.subplots(n_pos, 1, figsize=(10, 4 * n_pos), sharex=True)
+    fig_force, axes_force = plt.subplots(n_pos, 1, figsize=(10, 4 * n_pos), sharex=True)
+
+    axes_disp = np.atleast_1d(axes_disp)
+    axes_force = np.atleast_1d(axes_force)
+
+    for idx, (s_pos, pos) in enumerate(zip(target_s, positions)):
         i_los = int(np.argmin(np.abs(los_arr - s_pos)))
         z1 = un0[:, i_los]
         z2 = un1[:, i_los]
 
-
         i_grid = int(np.argmin(np.abs(s_grid[1:-1] - s_pos))) + 1
         force1 = FN[:, 0, i_grid]
         force2 = FN[:, 1, i_grid]
-      
-        fig = plt.figure(figsize=(10, 8))
 
-        ax = fig.add_subplot(211)
-        ax.plot(t_axis, z1, label=f"Normal displacement at {pos} (cable 1)")
-        ax.plot(t_axis, z2, label=f"Normal displacement at {pos} (cable 2)")
-        ax.set_xlabel("Time [s]")
-        ax.set_ylabel("Displacement [m]")
-        ax.grid(True, alpha=0.3)
-        ax.legend()
+        ax_d = axes_disp[idx]
+        ax_d.plot(t_axis, z1, label=f"Normal displacement at {pos} (cable 1)")
+        ax_d.plot(t_axis, z2, label=f"Normal displacement at {pos} (cable 2)")
+        ax_d.set_ylabel("Displacement [m]")
+        ax_d.grid(True, alpha=0.3)
+        ax_d.legend()
 
-        ax = fig.add_subplot(212)
-        ax.plot(t_axis, force1, label=f"Normal force at {pos} (cable 1)")
-        ax.plot(t_axis, force2, label=f"Normal force at {pos} (cable 2)")
-        ax.set_xlabel("Time [s]")
-        ax.set_ylabel("Force [N/m]")
-        ax.grid(True, alpha=0.3)
-        ax.legend()
 
-        fig.tight_layout()
+        ax_f = axes_force[idx]
+        ax_f.plot(t_axis, force1, label=f"Normal force at {pos} (cable 1)")
+        ax_f.plot(t_axis, force2, label=f"Normal force at {pos} (cable 2)")
+        ax_f.set_ylabel("Force [N/m]")
+        ax_f.grid(True, alpha=0.3)
+        ax_f.legend()
 
-        fig = plt.figure(figsize=(10, 8))
-        ax = fig.add_subplot(111)
+        fig_fft = plt.figure(figsize=(10, 8))
+        ax = fig_fft.add_subplot(111)
 
         dt_out = t_axis[1] - t_axis[0]
         freq = np.fft.fftfreq(t_axis.shape[-1], dt_out)
@@ -159,16 +165,56 @@ def run() -> None:
         ax.grid(True)
         ax.legend()
 
-        for norm_z, color in ((norm_z1, "tab:blue"), (norm_z2, "tab:orange")):
+        print(f"Pics de fréquences à {pos} ")
+        f_ip = _ip_frequencies(
+            lspan=L,
+            tension=cable.tension,
+            sld=cable.h,
+            linm=cable.mass,
+            axs=cable.EA,
+            n=6,
+        )
+        f_op = _op_frequencies(
+            lspan=L,
+            tension=cable.tension,
+            sld=cable.h,
+            linm=cable.mass,
+            n=6,
+                )
+        print("Modes dans le plan (normal) :", f_ip)
+        print("Modes hors plan (binormal)  :", f_op)
+        for norm_z, color, cable_label in (
+            (norm_z1, "tab:blue", "cable 1"),
+            (norm_z2, "tab:orange", "cable 2"),
+        ):
             peaks, _ = signal.find_peaks(norm_z)
             if peaks.size > 0:
                 values = norm_z[peaks]
                 top_idx = np.flip(np.argsort(values))[:5]
                 f_peaks = freq_pos[peaks]
+
+                peaks_str = ", ".join(
+                    f"{f_peaks[idx_p]:.2f} Hz (amp={values[idx_p]:.3g})"
+                    for idx_p in top_idx
+                )
+                print(f"  {cable_label} : {peaks_str}")
+
                 for idx_p in top_idx:
                     ax.text(f_peaks[idx_p], values[idx_p], f"f={f_peaks[idx_p]:.2f}Hz", color=color)
+            else:
+                print(f"  {cable_label} : aucun pic détecté")
+        fig_fft.tight_layout()
+        safe_pos = str(pos).replace(" ", "_").replace("/", "_")
+        fig_fft.savefig(os.path.join(results_dir, f"fft_{safe_pos}_f2.png"), dpi=300)
 
-        fig.tight_layout()
+    axes_disp[-1].set_xlabel("Time [s]")
+    axes_force[-1].set_xlabel("Time [s]")
+
+    fig_disp.tight_layout()
+    fig_disp.savefig(os.path.join(results_dir, "displacements_all_positions_f2.png"), dpi=300)
+
+    fig_force.tight_layout()
+    fig_force.savefig(os.path.join(results_dir, "forces_all_positions_f2.png"), dpi=300)
 
     plt.show()
 
